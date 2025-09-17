@@ -124,7 +124,6 @@ Ejemplo de filas:
 
 ---
 
-## 🔬 Pruebas Automáticas
 
 ### 📁 Estructura
 ```
