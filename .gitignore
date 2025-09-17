@@ -159,3 +159,6 @@ runs/
 # Temporary files
 *.tmp
 *.temp
+
+# Ignorar reportes CSV generados por la aplicación
+reports/
