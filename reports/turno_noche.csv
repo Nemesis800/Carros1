@@ -1,5 +1,0 @@
-﻿timestamp;evento;clase;car_in;car_out;moto_in;moto_out;car_inv;moto_inv;modelo;conf;orientacion;pos_linea;invertido;fuente
-2025-09-17T20:23:04;IN;car;1;0;0;0;1;0;yolo12n.pt;0.30;vertical;0.50;False;/data/input.mp4
-2025-09-17T20:23:17;IN;car;2;0;0;0;2;0;yolo12n.pt;0.30;vertical;0.50;False;/data/input.mp4
-2025-09-17T20:23:41;IN;car;3;0;0;0;3;0;yolo12n.pt;0.30;vertical;0.50;False;/data/input.mp4
-2025-09-17T20:23:46;SUMMARY;-;3;0;0;0;3;0;yolo12n.pt;0.30;vertical;0.50;False;/data/input.mp4

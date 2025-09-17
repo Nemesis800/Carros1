@@ -1,5 +1,0 @@
-﻿timestamp;evento;clase;car_in;car_out;moto_in;moto_out;car_inv;moto_inv;modelo;conf;orientacion;pos_linea;invertido;fuente
-2025-09-17T15:58:33;IN;car;1;0;0;0;1;0;yolo12n.pt;0.30;vertical;0.50;False;C:/Users/CAMILO/Desktop/Semestre_2_espe/Desarrollo_de_proyectos/Contador de vehiculos/videos/prueba1.MP4
-2025-09-17T15:58:40;IN;car;2;0;0;0;2;0;yolo12n.pt;0.30;vertical;0.50;False;C:/Users/CAMILO/Desktop/Semestre_2_espe/Desarrollo_de_proyectos/Contador de vehiculos/videos/prueba1.MP4
-2025-09-17T15:58:55;IN;car;3;0;0;0;3;0;yolo12n.pt;0.30;vertical;0.50;False;C:/Users/CAMILO/Desktop/Semestre_2_espe/Desarrollo_de_proyectos/Contador de vehiculos/videos/prueba1.MP4
-2025-09-17T15:58:57;SUMMARY;-;3;0;0;0;3;0;yolo12n.pt;0.30;vertical;0.50;False;C:/Users/CAMILO/Desktop/Semestre_2_espe/Desarrollo_de_proyectos/Contador de vehiculos/videos/prueba1.MP4
