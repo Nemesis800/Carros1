@@ -1,0 +1,28 @@
+# Carpeta de reportes (no la copies a la imagen)
+reports/
+
+# Entornos y caches
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pytest_cache/
+htmlcov/
+
+# Git & editor
+.git/
+.gitignore
+.gitattributes
+.vscode/
+.idea/
+
+# Datos grandes/video de ejemplo
+*.mp4
+*.avi
+*.mov
+*.mkv
+
+# Modelos locales (si los guardas en la raíz)
+*.pt
