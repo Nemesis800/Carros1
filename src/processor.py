@@ -1,6 +1,7 @@
 from __future__ import annotations
 import os
 import csv
+import time
 import threading
 from datetime import datetime
 from pathlib import Path
@@ -9,6 +10,15 @@ from typing import Optional, Callable
 import cv2
 import numpy as np
 import supervision as sv
+
+# Importar MLflow con manejo de errores
+try:
+    import mlflow
+    import mlflow.pytorch
+    MLFLOW_AVAILABLE = True
+except ImportError:
+    MLFLOW_AVAILABLE = False
+    print("⚠️  MLflow no está instalado. Las métricas no se registrarán.")
 
 from detector import VehicleDetector
 from counter import LineCrossingCounterByClass
@@ -35,6 +45,10 @@ class VideoProcessor(threading.Thread):
         display: bool = True,                 # True=con ventanas; False=headless
         on_frame: Callable[[np.ndarray], None] | None = None,     # NUEVO
         on_progress: Callable[[float], None] | None = None,       # NUEVO
+        # MLflow parameters
+        enable_mlflow: bool = True,           # Habilitar tracking con MLflow
+        experiment_name: str = "vehicle_detection",  # Nombre del experimento MLflow
+        mlflow_tags: dict = None,            # Tags adicionales para MLflow
     ) -> None:
         super().__init__(daemon=True)
         self.video_source = video_source
@@ -48,6 +62,16 @@ class VideoProcessor(threading.Thread):
         self.on_frame = on_frame
         self.on_progress = on_progress
 
+        # MLflow configuration
+        self.enable_mlflow = enable_mlflow and MLFLOW_AVAILABLE
+        self.experiment_name = experiment_name
+        self.mlflow_tags = mlflow_tags or {}
+        self.mlflow_run_id = None
+        self.mlflow_start_time = None
+        self.frame_count = 0
+        self.detection_count = 0
+        self.fps_samples = []
+        
         # Estados para alarma de capacidad (evitar beeps repetidos por frame)
         self._prev_over_car = False
         self._prev_over_moto = False
@@ -63,6 +87,13 @@ class VideoProcessor(threading.Thread):
     # ---------- Utilidades internas ----------
     def _notify_error(self, msg: str) -> None:
         """Envía error al callback si existe; si no, imprime en consola."""
+        # Log error to MLflow if available
+        if self.enable_mlflow and self.mlflow_run_id:
+            try:
+                mlflow.log_param("last_error", msg)
+            except Exception:
+                pass
+        
         try:
             if self.on_error:
                 self.on_error(msg)
@@ -70,6 +101,217 @@ class VideoProcessor(threading.Thread):
                 print(f"[ERROR] {msg}")
         except Exception:
             print(f"[ERROR] {msg}")
+    
+    # ---------- Métodos MLflow ----------
+    def _init_mlflow(self) -> None:
+        """Inicializa MLflow experiment y run."""
+        if not self.enable_mlflow:
+            return
+        
+        try:
+            # Configurar directorio MLflow local
+            mlflow_dir = Path("mlruns")
+            mlflow_dir.mkdir(exist_ok=True)
+            mlflow.set_tracking_uri(f"file:///{mlflow_dir.absolute()}")
+            
+            # Crear o usar experimento existente
+            try:
+                experiment_id = mlflow.create_experiment(self.experiment_name)
+                print(f"🎦 Experimento MLflow creado: {self.experiment_name}")
+            except mlflow.exceptions.MlflowException:
+                experiment = mlflow.get_experiment_by_name(self.experiment_name)
+                experiment_id = experiment.experiment_id
+                print(f"📂 Usando experimento MLflow: {self.experiment_name}")
+            
+            mlflow.set_experiment(self.experiment_name)
+            
+            # Tags por defecto
+            default_tags = {
+                "mlflow.source.type": "LOCAL",
+                "mlflow.source.name": "vehicle_detection_processor",
+                "video_type": "webcam" if isinstance(self.video_source, int) else "file",
+                "timestamp": datetime.now().isoformat(),
+                "model_family": "YOLO",
+                "task": "object_detection_counting"
+            }
+            default_tags.update(self.mlflow_tags)
+            
+            # Iniciar run
+            run = mlflow.start_run(tags=default_tags)
+            self.mlflow_run_id = run.info.run_id
+            self.mlflow_start_time = time.time()
+            
+            # Log configuration parameters
+            self._log_config_params()
+            
+            print(f"🚀 MLflow Run iniciado: {self.mlflow_run_id}")
+            
+        except Exception as e:
+            print(f"⚠️  Error inicializando MLflow: {e}")
+            self.enable_mlflow = False
+    
+    def _log_config_params(self) -> None:
+        """Registra parámetros de configuración en MLflow."""
+        if not self.enable_mlflow or not self.mlflow_run_id:
+            return
+        
+        try:
+            params = {
+                "model_name": self.config.model_name,
+                "confidence_threshold": self.config.conf,
+                "iou_threshold": self.config.iou,
+                "line_orientation": self.config.line_orientation,
+                "line_position": self.config.line_position,
+                "invert_direction": self.config.invert_direction,
+                "capacity_car": self.config.capacity_car,
+                "capacity_moto": self.config.capacity_moto,
+                "enable_csv": getattr(self.config, 'enable_csv', False),
+                "device": self.config.device or "auto",
+                "video_source": str(self.video_source),
+                "display_mode": self.display
+            }
+            
+            mlflow.log_params(params)
+            print(f"📝 Parámetros registrados en MLflow: {len(params)}")
+            
+        except Exception as e:
+            print(f"⚠️  Error registrando parámetros: {e}")
+    
+    def _log_model_info(self, detector) -> None:
+        """Registra información del modelo YOLO en MLflow."""
+        if not self.enable_mlflow or not self.mlflow_run_id:
+            return
+        
+        try:
+            model = detector.model
+            model_info = {
+                "model_type": "YOLO",
+                "model_architecture": self.config.model_name,
+                "input_size": 640,
+                "num_classes": len(model.names) if hasattr(model, 'names') else 0,
+                "target_classes": list(detector.name_to_id.keys()) if hasattr(detector, 'name_to_id') else []
+            }
+            
+            mlflow.log_params({
+                f"model_{k}": str(v) if isinstance(v, list) else v
+                for k, v in model_info.items() if k != "target_classes"
+            })
+            
+            # Registrar clases como texto
+            if model_info["target_classes"]:
+                mlflow.log_text(",".join(model_info["target_classes"]), "target_classes.txt")
+            
+            # Registrar archivo del modelo si existe
+            if os.path.exists(self.config.model_name):
+                mlflow.log_artifact(self.config.model_name, "model")
+            
+            print(f"🤖 Modelo registrado en MLflow: {self.config.model_name}")
+            
+        except Exception as e:
+            print(f"⚠️  Error registrando modelo: {e}")
+    
+    def _log_detection_metrics(self, detections_count: int, car_count: int, moto_count: int, fps: float = None) -> None:
+        """Registra métricas de detección en MLflow."""
+        if not self.enable_mlflow or not self.mlflow_run_id:
+            return
+        
+        try:
+            self.frame_count += 1
+            self.detection_count += detections_count
+            
+            if fps is not None:
+                self.fps_samples.append(fps)
+            
+            # Timestamp relativo desde inicio
+            timestamp = int((time.time() - self.mlflow_start_time) * 1000) if self.mlflow_start_time else None
+            
+            # Métricas por frame (cada 30 frames para no saturar)
+            if self.frame_count % 30 == 0:
+                metrics = {
+                    "detections_per_frame": detections_count,
+                    "cars_detected": car_count,
+                    "motorcycles_detected": moto_count,
+                    "total_detections": self.detection_count,
+                    "avg_detections_per_frame": self.detection_count / self.frame_count
+                }
+                
+                if fps is not None:
+                    metrics["current_fps"] = fps
+                
+                if self.fps_samples:
+                    metrics["avg_fps"] = sum(self.fps_samples) / len(self.fps_samples)
+                
+                for key, value in metrics.items():
+                    mlflow.log_metric(key, value, step=timestamp)
+                    
+        except Exception as e:
+            print(f"⚠️  Error registrando métricas de detección: {e}")
+    
+    def _log_counting_metrics(self, car_in: int, car_out: int, car_inv: int, 
+                             moto_in: int, moto_out: int, moto_inv: int) -> None:
+        """Registra métricas de conteo en MLflow."""
+        if not self.enable_mlflow or not self.mlflow_run_id:
+            return
+        
+        try:
+            timestamp = int((time.time() - self.mlflow_start_time) * 1000) if self.mlflow_start_time else None
+            
+            # Métricas de conteo (cada 60 frames)
+            if self.frame_count % 60 == 0:
+                metrics = {
+                    "cars_in_total": car_in,
+                    "cars_out_total": car_out,
+                    "cars_inventory": car_inv,
+                    "motorcycles_in_total": moto_in,
+                    "motorcycles_out_total": moto_out,
+                    "motorcycles_inventory": moto_inv,
+                    "total_vehicles_inside": car_inv + moto_inv,
+                    "total_entries": car_in + moto_in,
+                    "total_exits": car_out + moto_out,
+                    "net_flow": (car_in + moto_in) - (car_out + moto_out)
+                }
+                
+                # Verificar exceso de capacidad
+                if car_inv > self.config.capacity_car or moto_inv > self.config.capacity_moto:
+                    metrics["capacity_exceeded"] = 1
+                
+                for key, value in metrics.items():
+                    mlflow.log_metric(key, value, step=timestamp)
+                    
+        except Exception as e:
+            print(f"⚠️  Error registrando métricas de conteo: {e}")
+    
+    def _finish_mlflow(self) -> None:
+        """Finaliza el run de MLflow registrando métricas finales."""
+        if not self.enable_mlflow or not self.mlflow_run_id:
+            return
+        
+        try:
+            # Métricas finales
+            if self.mlflow_start_time:
+                total_time = time.time() - self.mlflow_start_time
+                final_metrics = {
+                    "total_processing_time": total_time,
+                    "total_frames_processed": self.frame_count,
+                    "total_detections_final": self.detection_count,
+                    "final_avg_fps": sum(self.fps_samples) / len(self.fps_samples) if self.fps_samples else 0,
+                    "processing_efficiency": self.frame_count / total_time if total_time > 0 else 0
+                }
+                
+                mlflow.log_metrics(final_metrics)
+            
+            # Registrar CSV como artefacto si existe
+            if self._csv_path_str and os.path.exists(self._csv_path_str):
+                mlflow.log_artifact(self._csv_path_str, "reports")
+                print(f"📄 CSV registrado como artefacto: {self._csv_path_str}")
+            
+            # Finalizar run
+            mlflow.end_run()
+            print(f"🏁 MLflow Run finalizado exitosamente")
+            print(f"🔗 Ver resultados en: http://localhost:5000/#/experiments")
+            
+        except Exception as e:
+            print(f"⚠️  Error finalizando MLflow: {e}")
 
     def _init_csv(self) -> None:
         """Inicializa CSV si está habilitado en config (crea carpeta y cabecera)."""
@@ -176,6 +418,11 @@ class VideoProcessor(threading.Thread):
     def run(self) -> None:
         """Bucle principal de procesamiento: captura → detecta → trackea → cuenta → (overlay/CSV)."""
         cap = None
+        frame_start_time = None
+        
+        # Inicializar MLflow al inicio
+        self._init_mlflow()
+        
         try:
             # 1) Abrir fuente
             cap = cv2.VideoCapture(self.video_source)
@@ -218,6 +465,9 @@ class VideoProcessor(threading.Thread):
             tracker = sv.ByteTrack()
             counter = LineCrossingCounterByClass(a=a, b=b, invert_direction=self.config.invert_direction)
 
+            # Registrar información del modelo en MLflow
+            self._log_model_info(detector)
+
             box_annotator = sv.BoxAnnotator()
             label_annotator = sv.LabelAnnotator()
 
@@ -231,6 +481,8 @@ class VideoProcessor(threading.Thread):
 
             # 7) Bucle de frames
             while not self.stop_event.is_set():
+                frame_start_time = time.time()
+                
                 if pending_first:
                     pending_first = False
                 else:
@@ -273,6 +525,35 @@ class VideoProcessor(threading.Thread):
                 moto_out = counter.out_counts.get("motorcycle", 0)
                 moto_inv = counter.inventory.get("motorcycle", 0)
 
+                # Dibujar panel de información en el video
+                panel_w = 420
+                panel_h = 140
+                # Fondo negro semi-transparente para el panel
+                overlay = draw_frame.copy()
+                cv2.rectangle(overlay, (10, 10), (10 + panel_w, 10 + panel_h), (0, 0, 0), -1)
+                cv2.addWeighted(overlay, 0.7, draw_frame, 0.3, 0, draw_frame)
+                
+                # Título del panel
+                cv2.putText(draw_frame, "Conteo IN/OUT e Inventario", (20, 35), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+                
+                # Información de carros
+                cv2.putText(draw_frame, f"Carros -> IN: {car_in} | OUT: {car_out} | INV: {car_inv}/{self.config.capacity_car}",
+                           (20, 65), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (80, 255, 80), 2)
+                
+                # Información de motos
+                cv2.putText(draw_frame, f"Motos  -> IN: {moto_in} | OUT: {moto_out} | INV: {moto_inv}/{self.config.capacity_moto}",
+                           (20, 95), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (80, 200, 255), 2)
+                
+                # Mensaje de salida en la esquina superior derecha
+                exit_msg = "Presiona Q para salir"
+                msg_size = cv2.getTextSize(exit_msg, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
+                msg_x = draw_frame.shape[1] - msg_size[0] - 15
+                msg_y = 30
+                # Fondo para el mensaje
+                cv2.rectangle(draw_frame, (msg_x - 5, msg_y - 20), (draw_frame.shape[1] - 5, msg_y + 5), (0, 0, 0), -1)
+                cv2.putText(draw_frame, exit_msg, (msg_x, msg_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+
                 # Guardar inventarios para SUMMARY final
                 self._last_car_inv = car_inv
                 self._last_moto_inv = moto_inv
@@ -280,11 +561,27 @@ class VideoProcessor(threading.Thread):
                 # 7.7) Alarma por capacidad
                 over_car = car_inv > self.config.capacity_car
                 over_moto = moto_inv > self.config.capacity_moto
+                
+                # Mostrar alerta visual si se excede la capacidad
                 if over_car or over_moto:
-                    cv2.putText(draw_frame, "ALERTA: CAPACIDAD EXCEDIDA", (20, 30),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+                    alert_text = "ALERTA: CAPACIDAD EXCEDIDA"
+                    # Texto parpadeante (usando el frame count para alternar)
+                    if (processed // 15) % 2 == 0:  # Parpadea cada 15 frames
+                        cv2.putText(draw_frame, alert_text, (20, 130), 
+                                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                        
+                        # Indicar qué tipo de vehículo excedió la capacidad
+                        if over_car:
+                            cv2.putText(draw_frame, "- CARROS EXCEDIDOS", (30, 155), 
+                                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+                        if over_moto:
+                            cv2.putText(draw_frame, "- MOTOS EXCEDIDAS", (30, 175), 
+                                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+                
+                # Beep solo al momento de exceder, no constantemente
                 if (over_car and not self._prev_over_car) or (over_moto and not self._prev_over_moto):
                     winsound_beep()
+                    
                 self._prev_over_car = over_car
                 self._prev_over_moto = over_moto
 
@@ -293,6 +590,31 @@ class VideoProcessor(threading.Thread):
                     car_in=car_in, car_out=car_out,
                     moto_in=moto_in, moto_out=moto_out,
                     car_inv=car_inv, moto_inv=moto_inv,
+                )
+                
+                # 7.8b) MLflow: Registrar métricas de detección y conteo
+                if frame_start_time:
+                    frame_time = time.time() - frame_start_time
+                    current_fps = 1.0 / frame_time if frame_time > 0 else 0
+                else:
+                    current_fps = None
+                    
+                # Contar detecciones por clase
+                car_detections = sum(1 for i in range(len(tracked)) 
+                                   if tracked.data.get("class_name", [""])[i] == "car")
+                moto_detections = sum(1 for i in range(len(tracked)) 
+                                    if tracked.data.get("class_name", [""])[i] == "motorcycle")
+                
+                self._log_detection_metrics(
+                    detections_count=len(tracked),
+                    car_count=car_detections,
+                    moto_count=moto_detections,
+                    fps=current_fps
+                )
+                
+                self._log_counting_metrics(
+                    car_in=car_in, car_out=car_out, car_inv=car_inv,
+                    moto_in=moto_in, moto_out=moto_out, moto_inv=moto_inv
                 )
 
                 # 7.9) Mostrar / callbacks
@@ -352,6 +674,9 @@ class VideoProcessor(threading.Thread):
                     except Exception:
                         pass
 
+            # Finalizar MLflow
+            self._finish_mlflow()
+            
             # Notificar fin al frontend
             if self.on_finish:
                 try:

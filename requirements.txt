@@ -11,6 +11,9 @@ grpcio>=1.62
 grpcio-tools>=1.62
 protobuf>=4.25
 
+# MLflow for experiment tracking
+mlflow>=2.8.0
+
 # Nota: ultralytics instalará PyTorch (CPU). Para GPU (CUDA), instala torch/cuDNN según tu GPU:
 # https://pytorch.org/get-started/locally/
 

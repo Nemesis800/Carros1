@@ -29,7 +29,7 @@ class App(tk.Tk):
         # Estado para controles de CSV
         self.var_enable_csv = tk.BooleanVar(value=self.config_data.enable_csv)
         self.var_csv_dir = tk.StringVar(value=self.config_data.csv_dir)
-        self.var_csv_name = tk.StringVar(value=self.config_data.csv_name or "")
+        self.var_csv_name = tk.StringVar(value=self.config_data.csv_name or "Registro")
 
         self._build_ui()
 
@@ -233,8 +233,8 @@ class App(tk.Tk):
             capacity_car=int(self.sp_car.get()),
             capacity_moto=int(self.sp_moto.get()),
             enable_csv=bool(self.var_enable_csv.get()),
-            csv_dir=self.var_csv_dir.get() or "reports",
-            csv_name=(self.var_csv_name.get().strip() or ""),
+            csv_dir=self.var_csv_dir.get() or "resultados",
+            csv_name=(self.var_csv_name.get().strip() or "Registro"),
         )
         return source, cfg
 

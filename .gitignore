@@ -162,3 +162,12 @@ runs/
 
 # Ignorar reportes CSV generados por la aplicación
 reports/
+
+# MLflow - experiment tracking
+mlruns/
+src/mlruns/
+artifacts/
+
+# Resultados y outputs temporales
+resultados/
+uploads/

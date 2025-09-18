@@ -44,5 +44,5 @@ class AppConfig:
 
     # Configuración de reportes CSV
     enable_csv: bool = True            
-    csv_dir: str = "reports"             
-    csv_name: Optional[str] = ""         
+    csv_dir: str = "resultados"             
+    csv_name: Optional[str] = "Registro"

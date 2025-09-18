@@ -1,10 +1,11 @@
-# Detección, Seguimiento y Conteo de Vehículos en Tiempo Real (YOLOv11 + Supervision)
+# Detección, Seguimiento y Conteo de Vehículos en Tiempo Real (YOLOv11 + Supervision + MLflow)
 
 Este proyecto detecta, sigue y cuenta vehículos (carros y motos) en tiempo real a partir de un video cargado manualmente o la webcam. Mantiene un inventario por tipo de vehículo con capacidades configurables y genera una alarma visual y auditiva cuando se excede la capacidad definida para cada tipo.  
 
 Incluye:
 - **YOLOv8, YOLOv11 y YOLOv12** como modelos de detección.
-- **Reportes CSV configurables**.
+- **🆕 Integración completa con MLflow** para seguimiento de experimentos y métricas.
+- **Reportes CSV configurables** con registro automático en MLflow.
 - **Modo CLI headless** y **UI (Tkinter / Streamlit)**.
 - **Pruebas automáticas con pytest** y **coverage**.
 - **Servicios separados vía gRPC** (inferencia y UI/cliente).
@@ -14,6 +15,7 @@ Incluye:
 
 ## 🚀 Tecnologías principales
 - **Ultralytics YOLO v8/v11/v12** – detección de objetos
+- **🆕 MLflow** – seguimiento de experimentos, métricas y gestión de modelos
 - **Supervision (ByteTrack)** – seguimiento y anotación
 - **OpenCV** – lectura de video y visualización
 - **Tkinter / Streamlit** – interfaces gráficas
@@ -27,7 +29,12 @@ Incluye:
 - Detección y conteo de vehículos en tiempo real.
 - Seguimiento multi-objeto con IDs únicos.
 - Inventario dinámico con alarmas visuales/sonoras.
-- Exportación de reportes CSV (IN/OUT y SUMMARY).
+- **🆕 Seguimiento automático de experimentos con MLflow**:
+  - Registro de parámetros de configuración
+  - Métricas en tiempo real (FPS, detecciones, conteos)
+  - Gestión de artefactos (CSV, modelos)
+  - Interfaz web para visualización de experimentos
+- Exportación de reportes CSV (IN/OUT y SUMMARY) con registro en MLflow.
 - Modo CLI headless para entornos sin interfaz gráfica.
 - Interfaz gráfica con Tkinter y **Streamlit (cliente web)**.
 - Servicios desacoplados:
@@ -54,7 +61,7 @@ uv venv .venv
 .\.venv\Scripts\activate
 
 # Instalar dependencias
-uv pip install -r requirements.txt
+uv pip install -r requirements.txt      # Incluye MLflow automáticamente
 uv pip install -r requirements-dev.txt   # dependencias de desarrollo
 ```
 
@@ -81,6 +88,7 @@ Esto abre una página web en http://localhost:8501 donde puedes:
 - Configurar modelo, confianza, línea de conteo y capacidades.
 - Ver los frames procesados en tiempo real.
 - Descargar el CSV generado.
+- **🆕 Todo automáticamente registrado en MLflow**.
 
 ---
 
@@ -199,8 +207,54 @@ Próxima etapa: el `streamlit_app.py` se conecta al servidor gRPC y muestra los 
 
 ---
 
+## 📊 MLflow - Seguimiento de Experimentos
+
+### 🚀 **Características MLflow Implementadas**
+
+**✅ Integración Completa**
+- **Habilitado por defecto** en todas las interfaces (Tkinter, Streamlit, CLI)
+- **Seguimiento automático** de parámetros, métricas y artefactos
+- **Interfaz web** para visualización y análisis
+
+**📈 Métricas Registradas**
+- **Detección**: detecciones por frame, FPS, objetos por clase
+- **Conteo**: entradas/salidas por tipo, inventario actual, flujo neto
+- **Rendimiento**: tiempo de procesamiento, eficiencia, memoria
+
+**🏷️ Parámetros Registrados**
+- **Modelo**: arquitectura YOLO, umbrales de confianza
+- **Sistema**: orientación de línea, capacidades, configuración
+- **Video**: fuente, resolución, duración
+
+### 🌐 **Interfaz Web MLflow**
+```powershell
+# Lanzar interfaz MLflow (script incluido)
+uv run -p .venv python launch_mlflow_ui.py
+
+# O directamente
+mlflow ui --port 5000
+```
+Accede a: **http://localhost:5000**
+
+### 📋 **Uso**
+MLflow funciona automáticamente:
+- **Tkinter**: `python src/app.py` 
+- **Streamlit**: `streamlit run streamlit_app.py`
+- **CLI**: `python src/app.py --cli --webcam`
+
+Todos los experimentos se registran automáticamente con métricas en tiempo real.
+
+### 📖 **Documentación Completa**
+Ver **[MLFLOW_INTEGRATION.md](MLFLOW_INTEGRATION.md)** para:
+- Configuración avanzada
+- Personalización de experimentos
+- Análisis de métricas
+- Cases de uso detallados
+
+---
+
 ## 📌 Próximos pasos
-- Integración con **MLflow** para registrar parámetros, métricas y artefactos (CSV).  
+- ~~Integración con **MLflow** para registrar parámetros, métricas y artefactos (CSV).~~ ✅ **IMPLEMENTADO**
 - Configuración de **docker-compose** para levantar `inference` (gRPC) + `ui` (Streamlit).  
 - Añadir **CI/CD** con GitHub Actions (pytest + coverage).  
 - Documentar **flujo Gitflow y Kanban** en el repo.
