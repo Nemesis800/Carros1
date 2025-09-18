@@ -4,6 +4,7 @@ opencv-python>=4.9.0
 numpy>=1.24
 matplotlib>=3.7
 pillow>=10.0.0
+streamlit>=1.38
 
 # Nota: ultralytics instalará PyTorch (CPU). Para GPU (CUDA), instala torch/cuDNN según tu GPU:
 # https://pytorch.org/get-started/locally/

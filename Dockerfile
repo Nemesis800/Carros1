@@ -1,6 +1,11 @@
 # syntax=docker/dockerfile:1.7
 FROM python:3.11-slim AS base
 
+EXPOSE 8501
+
+# Por defecto: modo Streamlit
+CMD ["streamlit", "run", "src/ui_streamlit/app.py", "--server.address=0.0.0.0", "--server.port=8501"]
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \

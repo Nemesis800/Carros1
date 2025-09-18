@@ -72,5 +72,11 @@ else
 	docker run --rm -it -v "$(CURDIR)\reports:/app/reports" -v "$(CURDIR)\.ultralytics_cache:/root/.cache/ultralytics" -v "$(SRC):/data/input.mp4:ro" contador-vehiculos:latest python src/app.py --cli --source /data/input.mp4 --model $(MODEL) --conf $(CONF) --orientation $(ORIENT) --line-pos $(LINE_POS) --cap-car $(CAP_CAR) --cap-moto $(CAP_MOTO) --csv --csv-dir /app/reports --csv-name "$(CSV_NAME)" --no-display
 endif
 
+run-ui-streamlit:
+\tuv run -p .venv streamlit run src/ui_streamlit/app.py
+
+docker-ui:
+\tdocker build -t $(USER)/contador-ui:latest .
+\tdocker run --rm -p 8501:8501 -v "$(PWD)/reports:/app/reports" $(USER)/contador-ui:latest
 
 
