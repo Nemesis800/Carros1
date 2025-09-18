@@ -124,6 +124,10 @@ class VideoProcessor(threading.Thread):
         """Inicializa MLflow (si está habilitado)."""
         if not self.enable_mlflow:
             return
+        
+        # Configurar directorio temporal propio desde el inicio
+        self._setup_temp_directory()
+        
         try:
             mlflow_dir = Path("mlruns")
             mlflow_dir.mkdir(exist_ok=True)
@@ -319,12 +323,277 @@ class VideoProcessor(threading.Thread):
         )
 
     # ------------------------------------------------------------------
+    # MLflow avanzado - logging al final
+    # ------------------------------------------------------------------
+    def _setup_temp_directory(self) -> None:
+        """Configura directorio temporal propio para evitar problemas de permisos."""
+        import os
+        import tempfile
+        from pathlib import Path
+        
+        try:
+            # Configurar directorio temporal propio
+            
+            # Crear directorio temporal dentro de la aplicación
+            app_temp_dir = Path.cwd() / "temp_app"
+            app_temp_dir.mkdir(exist_ok=True)
+            
+            # Guardar configuración original (para restaurar después)
+            if not hasattr(self, '_original_temp_config'):
+                self._original_temp_config = {
+                    'tempdir': tempfile.gettempdir(),
+                    'TMP': os.environ.get('TMP'),
+                    'TEMP': os.environ.get('TEMP'),
+                    'TMPDIR': os.environ.get('TMPDIR'),
+                    'HOME': os.environ.get('HOME'),
+                    'USERPROFILE': os.environ.get('USERPROFILE')
+                }
+            
+            # Configurar nuevo directorio temporal
+            str_temp_dir = str(app_temp_dir.absolute())
+            tempfile.tempdir = str_temp_dir
+            os.environ['TMP'] = str_temp_dir
+            os.environ['TEMP'] = str_temp_dir
+            os.environ['TMPDIR'] = str_temp_dir
+            
+            # IMPORTANTE: Cambiar también HOME y USERPROFILE para evitar C:\Users\CAMILO
+            current_dir = str(Path.cwd().absolute())
+            os.environ['HOME'] = current_dir
+            os.environ['USERPROFILE'] = current_dir
+            
+            # Directorio temporal configurado
+            
+            print(f"📁 Directorio temporal configurado: {str_temp_dir}")
+            
+        except Exception as e:
+            print(f"⚠️ Error configurando directorio temporal: {e}")
+    
+    def _restore_temp_directory(self) -> None:
+        """Restaura la configuración original del directorio temporal."""
+        if not hasattr(self, '_original_temp_config'):
+            return
+            
+        import os
+        import tempfile
+        
+        try:
+            config = self._original_temp_config
+            
+            # Restaurar tempfile
+            if config['tempdir']:
+                tempfile.tempdir = config['tempdir']
+            
+            # Restaurar variables de entorno
+            for var_name in ['TMP', 'TEMP', 'TMPDIR', 'HOME', 'USERPROFILE']:
+                if config[var_name] is not None:
+                    os.environ[var_name] = config[var_name]
+                elif var_name in os.environ:
+                    del os.environ[var_name]
+                    
+        except Exception as e:
+            print(f"⚠️ Error restaurando directorio temporal: {e}")
+    
+    def _try_create_visualization(self) -> None:
+        """Intenta crear visualización con manejo robusto de errores."""
+        try:
+            import matplotlib.pyplot as plt
+            from datetime import datetime
+            
+            # Usar solo directorio actual para evitar problemas de permisos
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+            
+            # Gráfico IN vs OUT
+            categories = ['Carros', 'Motos']
+            in_counts = [self._prev_counts.get("car_in", 0), self._prev_counts.get("moto_in", 0)]
+            out_counts = [self._prev_counts.get("car_out", 0), self._prev_counts.get("moto_out", 0)]
+            
+            x_pos = range(len(categories))
+            width = 0.35
+            
+            ax1.bar([p - width/2 for p in x_pos], in_counts, width, label='IN', color='green', alpha=0.7)
+            ax1.bar([p + width/2 for p in x_pos], out_counts, width, label='OUT', color='red', alpha=0.7)
+            ax1.set_xlabel('Tipo de Vehículo')
+            ax1.set_ylabel('Conteo')
+            ax1.set_title('Conteo de Vehículos IN vs OUT')
+            ax1.set_xticks(x_pos)
+            ax1.set_xticklabels(categories)
+            ax1.legend()
+            ax1.grid(True, alpha=0.3)
+            
+            # Gráfico inventario vs capacidad
+            inventories = [self._last_car_inv, self._last_moto_inv]
+            capacities = [self.config.capacity_car, self.config.capacity_moto]
+            
+            ax2.bar(x_pos, inventories, alpha=0.7, color=['blue', 'orange'], label='Inventario Actual')
+            ax2.bar(x_pos, capacities, alpha=0.3, color=['red', 'red'], label='Capacidad Máxima')
+            ax2.set_xlabel('Tipo de Vehículo')
+            ax2.set_ylabel('Cantidad')
+            ax2.set_title('Inventario Actual vs Capacidad')
+            ax2.set_xticks(x_pos)
+            ax2.set_xticklabels(categories)
+            ax2.legend()
+            ax2.grid(True, alpha=0.3)
+            
+            plt.tight_layout()
+            
+            # Usar directorio temporal de la aplicación
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            temp_dir = Path.cwd() / "temp_app"
+            viz_file = temp_dir / f"visualization_{timestamp}.png"
+            fig.savefig(str(viz_file), dpi=150, bbox_inches='tight')
+            plt.close(fig)
+            
+            # Intentar registrar como artifact
+            try:
+                mlflow.log_artifact(str(viz_file), "visualizations")
+                print("✅ Visualización creada y guardada en MLflow")
+            except Exception as e:
+                print(f"⚠️ MLflow artifact error (visualización): {e}")
+            finally:
+                # Limpiar archivo temporal
+                if viz_file.exists():
+                    try:
+                        viz_file.unlink()
+                    except Exception:
+                        pass
+                        
+        except Exception as e:
+            print(f"⚠️ Error creando visualización: {e}")
+    
+    def _try_register_csv(self) -> None:
+        """Intenta registrar CSV como artifact con manejo robusto de errores."""
+        try:
+            if self._csv_path_str and Path(self._csv_path_str).exists():
+                mlflow.log_artifact(self._csv_path_str, "reports")
+                print(f"✅ CSV registrado: {self._csv_path_str}")
+        except Exception as e:
+            print(f"⚠️ MLflow artifact error (CSV): {e}")
+    
+    def _try_register_model(self) -> None:
+        """Intenta registrar modelo como artifact con manejo robusto de errores."""
+        try:
+            model_path = Path(self.config.model_name)
+            if model_path.exists():
+                mlflow.log_artifact(str(model_path), "model_files")
+                print(f"✅ Modelo registrado: {self.config.model_name}")
+        except Exception as e:
+            print(f"⚠️ MLflow artifact error (modelo): {e}")
+    
+    def _apply_advanced_mlflow_features(self) -> None:
+        """Aplica características avanzadas de MLflow al finalizar el procesamiento."""
+        if not self.enable_mlflow or not self.mlflow_run_id:
+            return
+        
+        # Configurar directorio temporal propio ANTES de cualquier operación MLflow
+        self._setup_temp_directory()
+            
+        try:
+            import psutil
+            import platform
+            
+            print("🔍 Aplicando características avanzadas de MLflow...")
+            
+            # 1. Métricas finales de conteo
+            final_metrics = {
+                "total_car_in": self._prev_counts.get("car_in", 0),
+                "total_car_out": self._prev_counts.get("car_out", 0),
+                "total_moto_in": self._prev_counts.get("moto_in", 0),
+                "total_moto_out": self._prev_counts.get("moto_out", 0),
+                "final_car_inventory": self._last_car_inv,
+                "final_moto_inventory": self._last_moto_inv,
+                "total_frames_processed": self.frame_count,
+                "detection_count": self.detection_count,
+            }
+            
+            # FPS estadísticas
+            if self.fps_samples:
+                final_metrics["avg_fps"] = sum(self.fps_samples) / len(self.fps_samples)
+                final_metrics["max_fps"] = max(self.fps_samples)
+                final_metrics["min_fps"] = min(self.fps_samples)
+            
+            # Tiempo total de procesamiento
+            if self.mlflow_start_time:
+                processing_time = time.time() - self.mlflow_start_time
+                final_metrics["processing_time_seconds"] = processing_time
+                if self.frame_count > 0:
+                    final_metrics["frames_per_second_avg"] = self.frame_count / processing_time
+            
+            mlflow.log_metrics(final_metrics)
+            print("✅ Métricas finales registradas")
+            
+            # 2. Parámetros del sistema  
+            system_info = {
+                "cpu_count": psutil.cpu_count(),
+                "memory_total_gb": psutil.virtual_memory().total / (1024**3),
+                "memory_available_gb": psutil.virtual_memory().available / (1024**3),
+                "memory_used_percent": psutil.virtual_memory().percent,
+                "platform_system": platform.system(),
+                "platform_release": platform.release(),
+                "python_version": platform.python_version(),
+            }
+            
+            # GPU info si está disponible
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    gpu_props = torch.cuda.get_device_properties(0)
+                    system_info.update({
+                        "gpu_name": gpu_props.name,
+                        "gpu_memory_total_gb": gpu_props.total_memory / (1024**3),
+                        "gpu_compute_capability": f"{gpu_props.major}.{gpu_props.minor}"
+                    })
+            except Exception:
+                pass
+            
+            # Información del modelo
+            if self._current_model is not None:
+                model_info = {
+                    "yolo_model_type": "YOLO",
+                    "yolo_model_file": self.config.model_name,
+                    "yolo_confidence": self.config.conf,
+                    "yolo_iou_threshold": self.config.iou,
+                    "yolo_classes": "car,motorcycle",
+                    "yolo_device": str(self.config.device) if self.config.device else "auto"
+                }
+                system_info.update(model_info)
+            
+            mlflow.log_params(system_info)
+            print("✅ Parámetros del sistema y modelo registrados")
+            
+            # 3. Intentar artifacts (opcional - sin bloquear si hay errores)
+            artifacts_enabled = True  # Cambia a False si hay problemas persistentes
+            
+            if artifacts_enabled:
+                print("🖼️ Intentando registrar artifacts...")
+                self._try_create_visualization()
+                self._try_register_csv()
+                self._try_register_model()
+            else:
+                print("⚠️ Artifacts deshabilitados (problemas de permisos)")
+            
+            # 4. Finalizar run
+            mlflow.end_run()
+            print(f"🏁 MLflow Run finalizado: {self.mlflow_run_id}")
+            print("✅ Sistema MLflow avanzado completado exitosamente")
+                
+        except Exception as e:
+            print(f"⚠️ Error en características avanzadas de MLflow: {e}")
+            try:
+                mlflow.end_run()
+            except Exception:
+                pass
+        finally:
+            # Restaurar configuración temporal original
+            self._restore_temp_directory()
+
+    # ------------------------------------------------------------------
     # Loop principal
     # ------------------------------------------------------------------
     def run(self) -> None:
         """Bucle principal: captura → detecta → trackea → cuenta → reporta."""
         cap = None
         counter = None
+        detector = None
         try:
             cap = cv2.VideoCapture(self.video_source, cv2.CAP_FFMPEG)
             if not cap.isOpened():
@@ -350,6 +619,11 @@ class VideoProcessor(threading.Thread):
 
             self._init_csv()
             self._init_mlflow()
+            
+            # Variables para tracking de FPS
+            start_time = time.time()
+            fps_counter = 0
+            fps_update_interval = 30  # Actualizar cada 30 frames
 
             while not self.stop_event.is_set():
                 ok, frame = cap.read()
@@ -364,6 +638,9 @@ class VideoProcessor(threading.Thread):
                 detections = detector.detect(frame)
                 tracked = tracker.update_with_detections(detections)
                 counter.update(tracked)
+                
+                # Actualizar contador de detecciones
+                self.detection_count += len(detections)
 
                 # Deltas respecto al estado previo
                 car_in = max(counter.in_counts.get("car", 0) - self._prev_counts["car_in"], 0)
@@ -377,12 +654,142 @@ class VideoProcessor(threading.Thread):
                 # Escribir eventos si hubo cambios
                 if (car_in + car_out + moto_in + moto_out) > 0:
                     self._write_event_rows(car_in, car_out, moto_in, moto_out, car_inv, moto_inv)
-
-                # Mostrar ventana (opcional)
-                if self.display:
-                    cv2.imshow(WINDOW_NAME, frame)
-                    if cv2.waitKey(1) & 0xFF == ord("q"):
-                        break
+                
+                # ===== FUNCIONALIDADES VISUALES RESTAURADAS =====
+                
+                # Crear frame con anotaciones si display=True
+                if self.display or self.on_frame:
+                    draw_frame = frame.copy()
+                    
+                    # 1. Dibujar detecciones con boxes y labels
+                    box_annotator = sv.BoxAnnotator()
+                    label_annotator = sv.LabelAnnotator()
+                    
+                    # Etiquetas para cada detección
+                    labels = []
+                    for i in range(len(tracked)):
+                        class_name = tracked.data.get("class_name", [""] * len(tracked))[i] if "class_name" in tracked.data else ""
+                        confidence = tracked.confidence[i] if tracked.confidence is not None else 0.0
+                        tracker_id = tracked.tracker_id[i] if tracked.tracker_id is not None else None
+                        id_text = f"#{int(tracker_id)}" if tracker_id is not None else ""
+                        labels.append(f"{class_name} {id_text} {confidence:.2f}")
+                    
+                    # Aplicar anotaciones
+                    draw_frame = box_annotator.annotate(scene=draw_frame, detections=tracked)
+                    draw_frame = label_annotator.annotate(scene=draw_frame, detections=tracked, labels=labels)
+                    
+                    # 2. Dibujar línea de conteo
+                    cv2.line(draw_frame, counter.a, counter.b, (0, 255, 255), 3)
+                    cv2.circle(draw_frame, counter.a, 5, (0, 255, 255), -1)
+                    cv2.circle(draw_frame, counter.b, 5, (0, 255, 255), -1)
+                    
+                    # 3. Panel de información de conteos
+                    panel_w = 420
+                    panel_h = 140
+                    overlay = draw_frame.copy()
+                    cv2.rectangle(overlay, (10, 10), (10 + panel_w, 10 + panel_h), (0, 0, 0), -1)
+                    cv2.addWeighted(overlay, 0.7, draw_frame, 0.3, 0, draw_frame)
+                    
+                    # Título del panel
+                    cv2.putText(draw_frame, "Conteo IN/OUT e Inventario", (20, 35), 
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+                    
+                    # Información de carros
+                    car_total_in = counter.in_counts.get("car", 0)
+                    car_total_out = counter.out_counts.get("car", 0)
+                    cv2.putText(draw_frame, f"Carros -> IN: {car_total_in} | OUT: {car_total_out} | INV: {car_inv}/{self.config.capacity_car}",
+                               (20, 65), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (80, 255, 80), 2)
+                    
+                    # Información de motos
+                    moto_total_in = counter.in_counts.get("motorcycle", 0)
+                    moto_total_out = counter.out_counts.get("motorcycle", 0)
+                    cv2.putText(draw_frame, f"Motos  -> IN: {moto_total_in} | OUT: {moto_total_out} | INV: {moto_inv}/{self.config.capacity_moto}",
+                               (20, 95), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (80, 200, 255), 2)
+                    
+                    # Mensaje de salida
+                    if self.display:
+                        exit_msg = "Presiona Q para salir"
+                        msg_size = cv2.getTextSize(exit_msg, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
+                        msg_x = draw_frame.shape[1] - msg_size[0] - 15
+                        msg_y = 30
+                        cv2.rectangle(draw_frame, (msg_x - 5, msg_y - 20), (draw_frame.shape[1] - 5, msg_y + 5), (0, 0, 0), -1)
+                        cv2.putText(draw_frame, exit_msg, (msg_x, msg_y), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+                    
+                    # 4. Alarmas visuales por capacidad excedida
+                    over_car = car_inv > self.config.capacity_car
+                    over_moto = moto_inv > self.config.capacity_moto
+                    
+                    if over_car or over_moto:
+                        # Texto parpadeante cada 15 frames
+                        frame_mod = (self.frame_count // 15) % 2
+                        if frame_mod == 0:
+                            alert_text = "ALERTA: CAPACIDAD EXCEDIDA"
+                            cv2.putText(draw_frame, alert_text, (20, 130), 
+                                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+                            
+                            if over_car:
+                                cv2.putText(draw_frame, "- CARROS EXCEDIDOS", (30, 155), 
+                                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+                            if over_moto:
+                                cv2.putText(draw_frame, "- MOTOS EXCEDIDAS", (30, 175), 
+                                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+                    
+                    # Beep de alarma (solo al cambiar estado)
+                    if (over_car and not self._prev_over_car) or (over_moto and not self._prev_over_moto):
+                        winsound_beep()
+                    
+                    self._prev_over_car = over_car
+                    self._prev_over_moto = over_moto
+                    
+                    # 5. Mostrar ventana o callback
+                    if self.display:
+                        # Crear ventana con nombre único si no existe
+                        if self.active_window_name is None:
+                            timestamp = int(time.time() * 1000)
+                            self.active_window_name = f"VehicleCounter_{timestamp}"
+                            cv2.namedWindow(self.active_window_name, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
+                            cv2.resizeWindow(self.active_window_name, min(1280, frame.shape[1]), min(720, frame.shape[0]))
+                            print(f"🗺️ Ventana OpenCV creada: {self.active_window_name}")
+                        
+                        cv2.imshow(self.active_window_name, draw_frame)
+                        key = cv2.waitKey(1) & 0xFF
+                        if key == ord('q'):
+                            self.stop_event.set()
+                            break
+                    
+                    # Callback para Streamlit/UI web
+                    if self.on_frame:
+                        try:
+                            rgb_frame = cv2.cvtColor(draw_frame, cv2.COLOR_BGR2RGB)
+                            self.on_frame(rgb_frame)
+                        except Exception:
+                            pass
+                
+                # Progreso para UI web
+                if self.on_progress and total_frames > 0:
+                    progress = min(1.0, self.frame_count / total_frames)
+                    if int(progress * 100) % 10 == 0:  # Actualizar cada 10%
+                        try:
+                            self.on_progress(progress)
+                        except Exception:
+                            pass
+                
+                self.frame_count += 1
+                fps_counter += 1
+                
+                # Calcular FPS cada cierto interval
+                if fps_counter >= fps_update_interval:
+                    current_time = time.time()
+                    if current_time > start_time:
+                        fps = fps_counter / (current_time - start_time)
+                        self.fps_samples.append(fps)
+                        # Mantener solo las últimas 10 muestras de FPS
+                        if len(self.fps_samples) > 10:
+                            self.fps_samples.pop(0)
+                    
+                    # Reiniciar contador
+                    start_time = current_time
+                    fps_counter = 0
 
             # Guardar resumen al finalizar
             if counter is not None:
@@ -395,11 +802,33 @@ class VideoProcessor(threading.Thread):
         finally:
             if cap:
                 cap.release()
-            cv2.destroyAllWindows()
+            
+            # Destruir solo la ventana activa si existe
+            if self.active_window_name:
+                try:
+                    cv2.destroyWindow(self.active_window_name)
+                    print(f"🚮 Ventana {self.active_window_name} cerrada")
+                except Exception:
+                    pass
+                cv2.destroyAllWindows()  # Limpieza adicional
+            else:
+                cv2.destroyAllWindows()
+            
             if self.csv_fp:
                 try:
                     self.csv_fp.flush()
                 except Exception:
                     pass
                 self.csv_fp.close()
+            
+            # Aplicar características avanzadas de MLflow al finalizar
+            if detector is not None:
+                self._current_model = detector.model
+            self._apply_advanced_mlflow_features()
+            
+            if self.on_finish:
+                try:
+                    self.on_finish()
+                except Exception:
+                    pass
 
