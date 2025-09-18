@@ -1,44 +1,51 @@
-# syntax=docker/dockerfile:1.7
-FROM python:3.11-slim AS base
+# ==========================================================
+# Dockerfile para el sistema de conteo de vehículos
+# ==========================================================
 
-EXPOSE 8501
+# --- Etapa base: Python slim + dependencias del sistema ---
+FROM python:3.10-slim AS base
 
-# Por defecto: modo Streamlit
-CMD ["streamlit", "run", "src/ui_streamlit/app.py", "--server.address=0.0.0.0", "--server.port=8501"]
+# Evitar prompts interactivos de apt
+ENV DEBIAN_FRONTEND=noninteractive
 
-ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    # Ultralytics/torch usan ~/.cache; dejamos una ruta clara para volumen
-    ULT_CACHE_DIR=/root/.cache/ultralytics
-
-WORKDIR /app
-
-# Dependencias del sistema para OpenCV/ffmpeg y compatibilidad headless
-RUN apt-get update -y && apt-get install -y --no-install-recommends \
+# Instalamos dependencias del sistema necesarias
+RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
-    libglib2.0-0 \
     libgl1 \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Instala deps primero para cache de capas
-COPY requirements.txt /app/requirements.txt
-RUN pip install --upgrade pip && pip install -r requirements.txt
+# Crear directorio de trabajo
+WORKDIR /app
 
-# (Opcional) instala deps de test si vas a correr pytest dentro del contenedor
-# COPY requirements-dev.txt /app/requirements-dev.txt
-# RUN pip install -r requirements-dev.txt
+# Copiar requerimientos primero (para aprovechar cache de Docker)
+COPY requirements.txt .
 
-# Copia el resto del código
-COPY src/ /app/src/
-COPY README.md CASOS_USO.md CONTRIBUTING.md /app/
+# Instalar dependencias de Python
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Crea carpeta de reportes por defecto
+# --- Etapa final ---
+FROM base AS final
+
+# Copiar código fuente y otros archivos necesarios
+COPY src/ src/
+COPY proto/ proto/
+COPY clients/ clients/
+COPY services/ services/
+
+# Directorio para reportes CSV
 RUN mkdir -p /app/reports
 
-# Usuario no-root (opcional)
-RUN useradd -ms /bin/bash appuser && chown -R appuser:appuser /app /root
-USER appuser
+# Variables de entorno por defecto
+ENV PYTHONUNBUFFERED=1 \
+    CSV_DIR=/app/reports \
+    MODEL_NAME=yolo11n.pt
 
-# Comando por defecto: mostrar ayuda CLI (para ver flags disponibles)
-CMD ["python", "src/app.py", "--cli", "--help"]
+# Puerto gRPC (50051) y posible UI web (8080)
+EXPOSE 50051 8080
+
+# Comando por defecto: servidor gRPC
+CMD ["python", "services/inference_server.py"]

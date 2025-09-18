@@ -1,6 +1,17 @@
+# src/counter.py
+"""
+Módulo para conteo de cruces de vehículos en una línea definida.
+
+Incluye:
+- `_side_of_line`: utilidad para determinar en qué lado de una línea se encuentra un punto.
+- `LineCrossingCounterByClass`: clase que lleva inventario de cruces IN/OUT por clase.
+"""
+
 from __future__ import annotations
+
 from dataclasses import dataclass, field
-from typing import Dict, Tuple, Iterable
+from typing import Dict, Iterable, Tuple
+
 import numpy as np
 import supervision as sv
 
@@ -9,12 +20,13 @@ Point = Tuple[int, int]
 
 
 def _side_of_line(point: Point, a: Point, b: Point) -> float:
-    """
-    Devuelve el signo del punto respecto a la línea AB usando el producto cruzado 2D.
+    """Devuelve el signo de un punto respecto a una línea AB usando producto cruzado 2D.
+
     Interpretación del resultado:
-      > 0 : punto a un lado de la línea
-      < 0 : punto al lado opuesto
-      = 0 : punto sobre la línea
+        > 0 : punto a un lado de la línea
+        < 0 : punto al lado opuesto
+        = 0 : punto sobre la línea
+
     Esto permite detectar cambios de lado entre frames (cruces).
     """
     x, y = point
@@ -25,57 +37,61 @@ def _side_of_line(point: Point, a: Point, b: Point) -> float:
 
 @dataclass
 class LineCrossingCounterByClass:
-    """
-    Contador de cruces por clase con inventario.
+    """Contador de cruces por clase con inventario dinámico.
 
-    Parámetros:
-      - a, b: puntos que definen la línea de conteo.
-      - labels: clases que se contabilizan (por defecto, 'car' y 'motorcycle').
-      - invert_direction: si es True, invierte el sentido IN/OUT.
+    Args:
+        a: Punto inicial de la línea de conteo.
+        b: Punto final de la línea de conteo.
+        labels: Clases a contabilizar (por defecto: "car", "motorcycle").
+        invert_direction: Si es True, invierte el sentido IN/OUT.
 
-    Estado:
-      - in_counts / out_counts: acumuladores por clase.
-      - inventory: IN - OUT por clase (inventario actual).
-      - _last_side: último signo observado por track_id (para detectar cambios).
+    Atributos:
+        in_counts: Conteo acumulado de entradas por clase.
+        out_counts: Conteo acumulado de salidas por clase.
+        inventory: Inventario actual por clase (IN - OUT).
+        _last_side: Último lado visto para cada track_id.
     """
+
+    # --- Parámetros de inicialización ---
     a: Point
     b: Point
     labels: Iterable[str] = ("car", "motorcycle")
-    invert_direction: bool = False  # True: invierte sentido 'in'/'out'
+    invert_direction: bool = False
 
+    # --- Estado interno de conteo ---
     in_counts: Dict[str, int] = field(default_factory=dict)
     out_counts: Dict[str, int] = field(default_factory=dict)
     inventory: Dict[str, int] = field(default_factory=dict)
 
-    # Estado interno: último lado visto por cada track_id
+    # Trackeo interno: último lado visto por cada track_id
     _last_side: Dict[int, float] = field(default_factory=dict, init=False)
 
     def __post_init__(self) -> None:
         """Inicializa contadores para todas las etiquetas configuradas."""
-        for l in self.labels:
-            self.in_counts.setdefault(l, 0)
-            self.out_counts.setdefault(l, 0)
-            self.inventory.setdefault(l, 0)
+        for label in self.labels:
+            self.in_counts.setdefault(label, 0)
+            self.out_counts.setdefault(label, 0)
+            self.inventory.setdefault(label, 0)
 
     def reset(self) -> None:
         """Reinicia los contadores y limpia el estado de trackeo."""
-        for l in self.labels:
-            self.in_counts[l] = 0
-            self.out_counts[l] = 0
-            self.inventory[l] = 0
+        for label in self.labels:
+            self.in_counts[label] = 0
+            self.out_counts[label] = 0
+            self.inventory[label] = 0
         self._last_side.clear()
 
     def update(self, detections: sv.Detections) -> None:
-        """
-        Actualiza el conteo con las detecciones del frame actual.
-        Requisitos de 'detections':
-          - .xyxy (np.ndarray N×4)
-          - .tracker_id (np.ndarray N) con IDs persistentes entre frames
-          - detections.data["class_name"] con nombres de clase normalizados
+        """Actualiza el conteo con las detecciones de un frame.
+
+        Requisitos de `detections`:
+            - `.xyxy` (np.ndarray N×4): bounding boxes.
+            - `.tracker_id` (np.ndarray N): IDs persistentes entre frames.
+            - `detections.data["class_name"]`: nombres de clase normalizados.
         """
         if len(detections) == 0:
-            # No hay detecciones en este frame: nada que hacer
-            # (Opcional: aquí se podría implementar timeout de IDs “fantasma”)
+            # No hay detecciones en este frame
+            # (Opcional: se podría implementar timeout para IDs "fantasma")
             return
 
         xyxy = detections.xyxy.astype(int)
@@ -83,46 +99,46 @@ class LineCrossingCounterByClass:
         class_names = detections.data.get("class_name", None)
 
         current_ids = set()
+
         for i in range(len(detections)):
             tid = tracker_ids[i] if tracker_ids is not None else None
             if tid is None:
-                # Sin ID de tracker no podemos determinar cruce persistente
+                # Sin ID de tracker no se puede determinar cruce persistente
                 continue
             current_ids.add(int(tid))
 
-            # Centro del bounding box
+            # Centroide del bounding box
             x1, y1, x2, y2 = xyxy[i].tolist()
             cx = (x1 + x2) // 2
             cy = (y1 + y2) // 2
 
-            # Lado actual respecto a la línea AB
+            # Determinar lado actual respecto a la línea
             side = _side_of_line((cx, cy), self.a, self.b)
 
-            # Lado previo registrado para este track_id
+            # Lado previo registrado
             prev = self._last_side.get(int(tid))
 
-            # Actualizamos el lado guardando el último valor no nulo
+            # Guardar último valor no nulo
             self._last_side[int(tid)] = side if side != 0 else (prev if prev is not None else 0)
 
-            # Si no hay historial o uno de los lados es 0 (sobre la línea), no contamos cruce
+            # Si no hay historial o punto está sobre la línea, no se cuenta
             if prev is None or prev == 0 or side == 0:
                 continue
 
-            # Se considera cruce si hay cambio de signo (de + a − o de − a +)
+            # Cruce = cambio de signo entre prev y side
             crossed = (prev > 0 and side < 0) or (prev < 0 and side > 0)
             if not crossed:
                 continue
 
-            # Nombre de clase (normalizado por el detector a 'car'/'motorcycle')
+            # Clase del objeto
             cname = str(class_names[i]) if class_names is not None else "unknown"
 
-            # Dirección del cruce: prev<0 -> side>0 se interpreta como “negativo a positivo”
+            # Determinar dirección del cruce
             went_neg_to_pos = prev < 0 and side > 0
             if self.invert_direction:
-                # Invertimos la semántica del sentido IN/OUT
                 went_neg_to_pos = not went_neg_to_pos
 
-            # Actualizamos contadores e inventario
+            # Actualizar contadores
             if went_neg_to_pos:
                 self.in_counts[cname] = self.in_counts.get(cname, 0) + 1
                 self.inventory[cname] = self.inventory.get(cname, 0) + 1
@@ -130,7 +146,8 @@ class LineCrossingCounterByClass:
                 self.out_counts[cname] = self.out_counts.get(cname, 0) + 1
                 self.inventory[cname] = self.inventory.get(cname, 0) - 1
 
-        # Purgamos IDs que ya no están presentes en este frame para no crecer sin límite
-        stale_ids = [k for k in self._last_side.keys() if k not in current_ids]
+        # Limpiar IDs no presentes en este frame
+        stale_ids = [k for k in self._last_side if k not in current_ids]
         for k in stale_ids:
             del self._last_side[k]
+

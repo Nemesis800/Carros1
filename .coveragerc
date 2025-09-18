@@ -1,10 +1,36 @@
+# ==========================================================
+# Configuración de coverage.py
+# ==========================================================
+
 [run]
 branch = True
+# Incluir solo el código fuente de la app
 source =
     src
+    services
+    clients
+# Omitir tests y entornos virtuales
+omit =
+    tests/*
+    */__init__.py
+    .venv/*
+    venv/*
+    */site-packages/*
 
 [report]
+# Mostrar métricas detalladas en consola
 show_missing = True
-skip_covered = False
-omit =
-    */__init__.py
+skip_covered = True
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.:
+    raise NotImplementedError
+    except ImportError
+    pass
+
+[html]
+directory = htmlcov
+title = Cobertura del Proyecto - Contador de Vehículos
+
+[xml]
+output = coverage.xml

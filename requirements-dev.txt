@@ -1,3 +1,18 @@
+# ==========================================================
+# Requerimientos de desarrollo y testing
+# ==========================================================
+
+# Reutiliza dependencias de producción
 -r requirements.txt
+
+# Testing
 pytest>=8.0
 coverage[toml]>=7.6
+
+# Formato y estilo de código
+black>=24.0.0
+isort>=5.13.0
+ruff>=0.4.0
+
+# Pre-commit hooks (opcional, recomendado)
+pre-commit>=3.7.0

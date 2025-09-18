@@ -1,0 +1,22 @@
+{
+  "os": "Windows",
+  "os_version": "10.0.19045",
+  "architecture": "64bit",
+  "processor": "Intel64 Family 6 Model 165 Stepping 2, GenuineIntel",
+  "python_version": "3.11.9",
+  "hostname": "DESKTOP-OT1O5PQ",
+  "total_ram_gb": 23.84,
+  "available_ram_gb": 11.08,
+  "ram_usage_percent": 53.5,
+  "cpu_count": 8,
+  "cpu_count_logical": 8,
+  "cpu_frequency_mhz": 2496.0,
+  "cuda_available": false,
+  "cuda_version": "N/A",
+  "gpu_count": 0,
+  "torch_version": "2.8.0+cpu",
+  "cv2_version": "4.12.0",
+  "numpy_version": "2.2.6",
+  "mlflow_version": "3.4.0",
+  "ultralytics_version": "8.3.201"
+}
