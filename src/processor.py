@@ -4,7 +4,7 @@ import csv
 import threading
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Callable
+from typing import Optional
 
 import cv2
 import numpy as np
@@ -19,22 +19,16 @@ from utils import winsound_beep
 class VideoProcessor(threading.Thread):
     """
     Procesa un stream de video aplicando detección, tracking y conteo.
-    Si display=False, corre en modo headless (sin ventanas), ideal para CLI o Streamlit.
-
-    Nuevos callbacks opcionales:
-      - on_frame(frame_rgb: np.ndarray): frame anotado en RGB para UI web.
-      - on_progress(p: float): progreso [0..1] según frames procesados (si se conoce el total).
+    Si display=False, corre en modo headless (sin ventanas), ideal para CLI.
     """
     def __init__(
         self,
         video_source: int | str,              # 0 (webcam) o ruta a video
         config: AppConfig,                    # parámetros de detección/contador/CSV
         stop_event: threading.Event,          # bandera para interrupción segura
-        on_error: Callable[[str], None] | None = None,     # callback de error (UI/CLI)
-        on_finish: Callable[[], None] | None = None,       # callback al terminar
+        on_error: callable | None = None,     # callback de error (UI/CLI)
+        on_finish: callable | None = None,    # callback al terminar
         display: bool = True,                 # True=con ventanas; False=headless
-        on_frame: Callable[[np.ndarray], None] | None = None,     # NUEVO
-        on_progress: Callable[[float], None] | None = None,       # NUEVO
     ) -> None:
         super().__init__(daemon=True)
         self.video_source = video_source
@@ -43,10 +37,6 @@ class VideoProcessor(threading.Thread):
         self.on_error = on_error
         self.on_finish = on_finish
         self.display = display
-
-        # NUEVO: hooks para UI web
-        self.on_frame = on_frame
-        self.on_progress = on_progress
 
         # Estados para alarma de capacidad (evitar beeps repetidos por frame)
         self._prev_over_car = False
@@ -119,7 +109,10 @@ class VideoProcessor(threading.Thread):
         moto_in: int, moto_out: int,
         car_inv: int, moto_inv: int,
     ) -> None:
-        """Escribe filas por cada incremento observado de IN/OUT desde el último frame."""
+        """
+        Escribe filas por cada incremento observado de IN/OUT desde el último frame.
+        Esto hace que el CSV sea “por evento”, no por frame.
+        """
         if not self.csv_writer:
             return
         now = datetime.now().isoformat(timespec="seconds")
@@ -142,6 +135,7 @@ class VideoProcessor(threading.Thread):
                     "webcam" if isinstance(self.video_source, int) else str(self.video_source),
                 ])
 
+        # Emitimos una fila por cada incremento detectado
         _write_rows(di_car,  "IN",  "car")
         _write_rows(do_car,  "OUT", "car")
         _write_rows(di_moto, "IN",  "motorcycle")
@@ -170,12 +164,12 @@ class VideoProcessor(threading.Thread):
                 "webcam" if isinstance(self.video_source, int) else str(self.video_source),
             ])
         except Exception:
+            # El summary es informativo; no interrumpimos si falla la escritura
             pass
 
     # ---------- Loop principal ----------
     def run(self) -> None:
         """Bucle principal de procesamiento: captura → detecta → trackea → cuenta → (overlay/CSV)."""
-        cap = None
         try:
             # 1) Abrir fuente
             cap = cv2.VideoCapture(self.video_source)
@@ -183,14 +177,11 @@ class VideoProcessor(threading.Thread):
                 self._notify_error("No se pudo abrir el video/cámara.")
                 return
 
-            # Para progreso, intentamos obtener número de frames (si es archivo)
-            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)) or 0
-            sent_progress = -1
-
             # 2) Primer frame para validar y obtener dimensiones
             ok, frame = cap.read()
             if not ok or frame is None:
                 self._notify_error("No se pudo leer el primer fotograma.")
+                cap.release()
                 return
 
             h, w = frame.shape[:2]
@@ -227,7 +218,6 @@ class VideoProcessor(threading.Thread):
                 cv2.resizeWindow(WINDOW_NAME, min(1280, w), min(720, h))
 
             pending_first = True  # ya tenemos el 1er frame leído
-            processed = 0
 
             # 7) Bucle de frames
             while not self.stop_event.is_set():
@@ -237,7 +227,6 @@ class VideoProcessor(threading.Thread):
                     ok, frame = cap.read()
                     if not ok or frame is None:
                         break  # fin de video
-                processed += 1
 
                 # 7.1) Detección + tracking
                 detections = detector.detect(frame)
@@ -253,17 +242,18 @@ class VideoProcessor(threading.Thread):
                     labels.append(f"{cname} {id_text} {conf:.2f}")
 
                 # 7.3) Overlay (opcional)
-                draw_frame = frame.copy()
-                draw_frame = box_annotator.annotate(scene=draw_frame, detections=tracked)
-                draw_frame = label_annotator.annotate(scene=draw_frame, detections=tracked, labels=labels)
+                if self.display:
+                    frame = box_annotator.annotate(scene=frame, detections=tracked)
+                    frame = label_annotator.annotate(scene=frame, detections=tracked, labels=labels)
 
                 # 7.4) Conteo por cruce
                 counter.update(tracked)
 
                 # 7.5) Dibujar línea y puntos extremos
-                cv2.line(draw_frame, counter.a, counter.b, (0, 255, 255), 3)
-                cv2.circle(draw_frame, counter.a, 5, (0, 255, 255), -1)
-                cv2.circle(draw_frame, counter.b, 5, (0, 255, 255), -1)
+                if self.display:
+                    cv2.line(frame, counter.a, counter.b, (0, 255, 255), 3)
+                    cv2.circle(frame, counter.a, 5, (0, 255, 255), -1)
+                    cv2.circle(frame, counter.b, 5, (0, 255, 255), -1)
 
                 # 7.6) Panel de estado (conteos actuales e inventario)
                 car_in = counter.in_counts.get("car", 0)
@@ -277,14 +267,40 @@ class VideoProcessor(threading.Thread):
                 self._last_car_inv = car_inv
                 self._last_moto_inv = moto_inv
 
-                # 7.7) Alarma por capacidad
+                if self.display:
+                    panel_w = 420
+                    cv2.rectangle(frame, (10, 10), (10 + panel_w, 140), (0, 0, 0), -1)
+                    cv2.putText(frame, "Conteo IN/OUT e Inventario", (20, 35),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2)
+
+                    exit_msg = "Presiona Q para salir"
+                    msg_size = cv2.getTextSize(exit_msg, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)[0]
+                    msg_x = frame.shape[1] - msg_size[0] - 15
+                    msg_y = 30
+                    cv2.rectangle(frame, (msg_x - 5, msg_y - 20), (frame.shape[1] - 5, msg_y + 5), (0, 0, 0), -1)
+                    cv2.putText(frame, exit_msg, (msg_x, msg_y),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+
+                    cv2.putText(
+                        frame,
+                        f"Carros -> IN: {car_in} | OUT: {car_out} | INV: {car_inv}/{self.config.capacity_car}",
+                        (20, 65), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (80, 255, 80), 2
+                    )
+                    cv2.putText(
+                        frame,
+                        f"Motos  -> IN: {moto_in} | OUT: {moto_out} | INV: {moto_inv}/{self.config.capacity_moto}",
+                        (20, 95), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (80, 200, 255), 2
+                    )
+
+                # 7.7) Alarma por capacidad (beep solo cuando cruza el umbral)
                 over_car = car_inv > self.config.capacity_car
                 over_moto = moto_inv > self.config.capacity_moto
-                if over_car or over_moto:
-                    cv2.putText(draw_frame, "ALERTA: CAPACIDAD EXCEDIDA", (20, 30),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+                if self.display and (over_car or over_moto):
+                    cv2.putText(frame, "ALERTA: CAPACIDAD EXCEDIDA", (20, 130),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+
                 if (over_car and not self._prev_over_car) or (over_moto and not self._prev_over_moto):
-                    winsound_beep()
+                    winsound_beep()  # solo suena en Windows
                 self._prev_over_car = over_car
                 self._prev_over_moto = over_moto
 
@@ -295,41 +311,20 @@ class VideoProcessor(threading.Thread):
                     car_inv=car_inv, moto_inv=moto_inv,
                 )
 
-                # 7.9) Mostrar / callbacks
+                # 7.9) Mostrar / teclado (UI)
                 if self.display:
-                    cv2.imshow(WINDOW_NAME, draw_frame)
+                    cv2.imshow(WINDOW_NAME, frame)
                     key = cv2.waitKey(1) & 0xFF
                     if key == ord('q'):
                         self.stop_event.set()
                         break
-                else:
-                    # Emitimos frame a la UI web
-                    if self.on_frame is not None:
-                        try:
-                            rgb = cv2.cvtColor(draw_frame, cv2.COLOR_BGR2RGB)
-                            self.on_frame(rgb)
-                        except Exception:
-                            pass
-
-                # 7.10) Progreso
-                if self.on_progress and total_frames > 0:
-                    p = min(1.0, max(0.0, processed / float(total_frames)))
-                    # Evitamos spamear demasiadas actualizaciones
-                    step = int(p * 100)
-                    if step != sent_progress:
-                        sent_progress = step
-                        try:
-                            self.on_progress(p)
-                        except Exception:
-                            pass
 
         except Exception as e:
             self._notify_error(f"Fallo inesperado en el procesamiento: {e}")
         finally:
             # Liberación de recursos (siempre)
             try:
-                if cap is not None:
-                    cap.release()
+                cap.release()
             except Exception:
                 pass
             if self.display:
