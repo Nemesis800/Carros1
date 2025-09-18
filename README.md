@@ -248,14 +248,28 @@ Próxima etapa: el `streamlit_app.py` se conecta al servidor gRPC y muestra los 
 - **Optimizado para Windows**: múltiples waitKey() calls
 
 ### 🌐 **Interfaz Web MLflow**
+
+**🆕 Recomendado para Windows (evita bloqueo de consola):**
 ```powershell
-# Lanzar interfaz MLflow (script incluido)
+# Opción 1: Script batch (más simple)
+mlflow_ui.bat
+
+# Opción 2: Script Python mejorado
+uv run -p .venv python mlflow_ui_simple.py
+```
+
+**Opciones tradicionales:**
+```powershell
+# Script original (puede bloquear consola)
 uv run -p .venv python launch_mlflow_ui.py
 
-# O directamente
+# Comando directo
 mlflow ui --port 5000
 ```
-Accede a: **http://localhost:5000**
+
+**Accede a**: **http://localhost:5000**
+
+💡 **Nota**: Si la consola se bloquea, usa `Ctrl+C` y luego `exit`
 
 ### 📋 **Uso**
 MLflow funciona automáticamente:

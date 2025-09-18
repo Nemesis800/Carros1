@@ -51,12 +51,51 @@ def launch_mlflow_ui(port: int = 5000, auto_open_browser: bool = True):
         browser_thread.start()
     
     try:
-        # Ejecutar MLflow UI
-        subprocess.run([
-            sys.executable, "-m", "mlflow", "ui",
-            "--port", str(port),
-            "--backend-store-uri", tracking_uri
-        ], check=True)
+        # Configurar proceso para evitar bloqueo en PowerShell
+        if os.name == 'nt':  # Windows
+            # Usar Popen en lugar de run para mejor control en Windows
+            cmd = [
+                sys.executable, "-m", "mlflow", "ui",
+                "--port", str(port),
+                "--backend-store-uri", tracking_uri
+            ]
+            
+            print(f"📝 Ejecutando: {' '.join(cmd)}")
+            print("💡 Para detener MLflow UI: presiona Ctrl+C")
+            print("🔄 Si la consola se bloquea, usa: Ctrl+C y luego escribe 'exit'")
+            print("-" * 50)
+            
+            # Crear proceso con configuración especial para PowerShell
+            process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                universal_newlines=True,
+                bufsize=1
+            )
+            
+            # Leer output en tiempo real
+            try:
+                for line in process.stdout:
+                    print(line.strip())
+                    if "Running on" in line:
+                        print("✅ MLflow UI iniciado correctamente")
+            except KeyboardInterrupt:
+                print("\n🛑 Deteniendo MLflow UI...")
+                process.terminate()
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                print("✅ MLflow UI detenido")
+        else:
+            # Para sistemas Unix/Linux usar el método original
+            subprocess.run([
+                sys.executable, "-m", "mlflow", "ui",
+                "--port", str(port),
+                "--backend-store-uri", tracking_uri
+            ], check=True)
+            
     except KeyboardInterrupt:
         print("\n🛑 MLflow UI detenido por el usuario")
     except subprocess.CalledProcessError as e:
