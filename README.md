@@ -1,8 +1,8 @@
-#Link de Kanban
+# Link de Kanban
 
 https://github.com/users/CamiloRosadaC/projects/1/views/1
 
-#Integrantes
+# Integrantes
 
 Camilo Eduardo Rosada Caicedo - 2205121 - 
 
