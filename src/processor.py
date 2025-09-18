@@ -78,6 +78,9 @@ class VideoProcessor(threading.Thread):
         
         # Nombre de ventana OpenCV (se asigna al crearla)
         self.active_window_name = None
+        
+        # Referencia al modelo para MLflow avanzado
+        self._current_model = None
 
         # CSV y acumuladores de conteo (para detectar incrementos)
         self.csv_fp = None
@@ -417,6 +420,47 @@ class VideoProcessor(threading.Thread):
         except Exception:
             pass
 
+    def _apply_advanced_mlflow_features(self) -> None:
+        """Aplica las funcionalidades avanzadas de MLflow al final del procesamiento."""
+        if not self.enable_mlflow or not self.mlflow_run_id:
+            return
+            
+        try:
+            print("🚀 Aplicando funcionalidades MLflow avanzadas...")
+            
+            # Usar la integración MLflow avanzada
+            from mlflow_integration import VehicleDetectionMLflowTracker
+            
+            # Crear tracker con el experimento actual
+            tracker = VehicleDetectionMLflowTracker(self.experiment_name)
+            tracker.run_id = self.mlflow_run_id
+            tracker.start_time = self.mlflow_start_time
+            
+            # 1. Registrar información del sistema
+            tracker.log_system_information()
+            
+            # 2. Transferir datos y crear visualizaciones
+            if self.fps_samples and len(self.fps_samples) > 1:
+                tracker.fps_samples = self.fps_samples
+                tracker.total_detections = self.detection_count
+                tracker.total_frames_processed = self.frame_count
+                tracker.create_and_log_visualizations()
+            
+            # 3. Registrar modelo en Model Registry si tenemos un modelo cargado
+            # Nota: El modelo se guarda en una variable de clase para acceso
+            if hasattr(self, '_current_model') and self._current_model:
+                try:
+                    tracker.register_model_to_registry(self._current_model)
+                except Exception as e:
+                    print(f"⚠️  Error registrando modelo en registry: {e}")
+            
+            print("✅ Funcionalidades MLflow avanzadas aplicadas exitosamente")
+            
+        except ImportError:
+            print("⚠️  Módulo mlflow_integration no disponible")
+        except Exception as e:
+            print(f"⚠️  Error en funcionalidades MLflow avanzadas: {e}")
+    
     # ---------- Loop principal ----------
     def run(self) -> None:
         """Bucle principal de procesamiento: captura → detecta → trackea → cuenta → (overlay/CSV)."""
@@ -473,6 +517,10 @@ class VideoProcessor(threading.Thread):
                 iou=self.config.iou,
                 device=self.config.device,
             )
+            
+            # Guardar referencia del modelo para MLflow avanzado
+            self._current_model = detector.model if hasattr(detector, 'model') else None
+            
             tracker = sv.ByteTrack()
             counter = LineCrossingCounterByClass(a=a, b=b, invert_direction=self.config.invert_direction)
 
@@ -697,35 +745,8 @@ class VideoProcessor(threading.Thread):
                     except Exception:
                         pass
 
-            # Nuevas funcionalidades MLflow antes de finalizar
-            if self.enable_mlflow and hasattr(self, '_log_system_info_called') == False:
-                try:
-                    # Usar la nueva integración MLflow si está disponible
-                    from mlflow_integration import get_mlflow_tracker
-                    tracker = get_mlflow_tracker()
-                    
-                    # Solo llamar una vez por run
-                    if hasattr(tracker, 'log_system_information'):
-                        tracker.log_system_information()
-                    
-                    if hasattr(tracker, 'create_and_log_visualizations'):
-                        # Transferir datos del procesador al tracker
-                        tracker.fps_samples = self.fps_samples
-                        tracker.total_detections = self.detection_count
-                        tracker.total_frames_processed = self.frame_count
-                        tracker.start_time = self.mlflow_start_time
-                        tracker.run_id = self.mlflow_run_id
-                        tracker.create_and_log_visualizations()
-                    
-                    if hasattr(tracker, 'register_model_to_registry') and hasattr(detector, 'model'):
-                        try:
-                            tracker.register_model_to_registry(detector.model)
-                        except Exception as e:
-                            print(f"⚠️  Error registrando modelo en registry: {e}")
-                    
-                    self._log_system_info_called = True
-                except Exception as e:
-                    print(f"⚠️  Error en funcionalidades MLflow avanzadas: {e}")
+            # Aplicar mejoras MLflow avanzadas antes de finalizar
+            self._apply_advanced_mlflow_features()
             
             # Finalizar MLflow
             self._finish_mlflow()

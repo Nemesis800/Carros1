@@ -543,8 +543,25 @@ class VehicleDetectionMLflowTracker:
             with open(model_dir / "metadata.json", "w") as f:
                 json.dump(metadata, f, indent=2)
             
-            # Registrar como artefacto
+            # Registrar modelo como artefacto primero
             mlflow.log_artifacts(str(model_dir), "model")
+            
+            # Crear un modelo dummy de MLflow para el registry
+            import mlflow.pyfunc
+            
+            class YOLOWrapper(mlflow.pyfunc.PythonModel):
+                def __init__(self, model_path):
+                    self.model_path = model_path
+                    
+                def predict(self, context, model_input):
+                    return f"YOLO model prediction with {model_input.shape if hasattr(model_input, 'shape') else 'input'}"
+            
+            # Log the wrapper model
+            mlflow.pyfunc.log_model(
+                "model",
+                python_model=YOLOWrapper(model_path),
+                artifacts={"model_file": str(model_path)}
+            )
             
             # Registrar en Model Registry
             model_uri = f"runs:/{self.run_id}/model"
