@@ -117,19 +117,63 @@ python src/app.py --cli --source "C:\Videos\ejemplo.mp4" --model yolo11n.pt ^
 ---
 
 ## 🧰 Uso de Makefile
-El proyecto incluye un `Makefile` para simplificar tareas comunes:
+El proyecto incluye un `Makefile` completo para simplificar tareas comunes:
+
 ```bash
+# ===== EJECUCIÓN =====
 # Ejecutar en modo CLI con video de ejemplo
 make run-cli SRC="videos/prueba1.MP4" MODEL=yolo12n.pt CONF=0.3 ORIENT=vertical LINE_POS=0.5
 
+# Ejecutar con interfaz Tkinter
+make run-ui
+
+# Levantar servidor gRPC
+make serve
+
+# Cliente gRPC
+make grpc-client SRC="videos/prueba1.MP4"
+
+# ===== TESTING (NUEVO) =====
+# Todos los tests (49 tests)
+make test
+
+# Tests detallados
+make test-verbose
+
+# Tests específicos
+make test-file TEST_FILE=tests/test_counter.py
+
+# Tests con cobertura
+make test-coverage
+
+# Reporte HTML de cobertura (abre automáticamente)
+make coverage
+
+# Tests rápidos (solo unit tests)
+make test-fast
+
+# Suite completa con validación
+make test-all
+
+# ===== DOCKER =====
 # Ejecutar en Docker en modo CLI
 make docker-run-cli SRC="videos/prueba1.MP4"
 
-# Ejecutar pruebas
-make test
+# Construir imagen Docker
+make docker-build
 
-# Generar reporte de coverage
-make coverage
+# ===== UTILIDADES =====
+# Formatear código
+make format
+
+# Limpiar archivos temporales
+make clean
+
+# Limpiar archivos de tests
+make clean-test
+
+# Ver todos los comandos disponibles
+make help
 ```
 
 ---
@@ -164,20 +208,131 @@ Ejemplo:
 
 ---
 
-## 🧪 Pruebas
-```bash
-# Instalar dependencias de desarrollo
-pip install -r requirements-dev.txt
+## 🧪 Sistema de Pruebas Completo
 
-# Correr pruebas
-pytest -q
+### ✅ **Suite de Testing Robusta: 49 Tests (100% Pasando)**
 
-# Reporte de coverage
-coverage run -m pytest
-coverage report -m
-coverage html
+**📊 Cobertura por Módulo:**
 ```
-Abre `htmlcov/index.html` en tu navegador para ver cobertura.
+📈 Cobertura Total: 55%
+
+🏆 Módulos con Excelente Cobertura:
+├── CLI (cli.py): 92% ✅
+├── Utils (utils.py): 90% ✅  
+├── Counter (counter.py): 85% ✅
+├── gRPC Client: 79% ✅
+└── MLflow Integration: 77% ✅
+
+🔶 Módulos con Buena Cobertura:
+├── Detector (detector.py): 65%
+├── Processor (processor.py): 61%
+└── gRPC Server: 43%
+
+📝 Módulos Funcionales (lógica testeada):
+├── UI Tkinter: Tests de lógica de negocio
+└── UI Streamlit: Tests de componentes web
+```
+
+**🗂️ Tipos de Tests Implementados:**
+- ✅ **Unit Tests** (30 tests): Funciones individuales
+- ✅ **Integration Tests** (12 tests): Pipeline completo
+- ✅ **UI Logic Tests** (7 tests): Lógica sin dependencias de ventana
+
+### 🚀 **Comandos de Testing Mejorados**
+
+```powershell
+# ===== BÁSICOS =====
+# Ejecutar todos los tests (49 tests)
+make test
+
+# Tests con más detalle
+make test-verbose
+
+# Tests específicos
+make test-file TEST_FILE=tests/test_counter.py
+
+# ===== COBERTURA =====
+# Ver cobertura en consola
+make test-coverage
+
+# Generar reporte HTML interactivo
+make coverage
+# Abre automáticamente htmlcov/index.html
+
+# Solo generar HTML sin abrir
+make coverage-html
+
+# ===== ESPECIALIZADOS =====
+# Tests rápidos (solo unit tests)
+make test-fast
+
+# Tests de integración
+make test-integration
+
+# Verificación completa antes de commit
+make test-all
+
+# Limpiar archivos de test
+make clean-test
+```
+
+### 📋 **Tests por Módulo**
+
+**🔧 Core Logic:**
+- `test_counter.py` (4 tests): Lógica de conteo y cruce de líneas
+- `test_detector_mapping.py` (1 test): Mapeo de clases YOLO
+- `test_processor.py` (via integration): Pipeline de procesamiento
+
+**⚙️ Interfaces:**
+- `test_cli.py` (7 tests): Parsing de argumentos y ejecución CLI
+- `test_ui_app.py` (8 tests): Lógica de Tkinter (sin ventanas)
+- `test_streamlit_app.py` (10 tests): Componentes web (sin servidor)
+
+**🌐 Servicios:**
+- `test_grpc_services.py` (6 tests): Cliente y servidor gRPC
+- `test_mlflow_integration.py` (7 tests): Tracking de experimentos
+
+**🔨 Utilidades:**
+- `test_utils.py` (4 tests): Funciones auxiliares multiplataforma
+- `test_app_csv.py` (1 test): Generación de reportes CSV
+- `test_headless_integration.py` (1 test): Pipeline headless completo
+
+### 🎯 **Configuración de Desarrollo**
+
+```powershell
+# Instalar dependencias de desarrollo
+uv pip install -r requirements-dev.txt
+
+# Configuración incluye:
+# ├── pytest: Framework de testing
+# ├── coverage: Análisis de cobertura
+# ├── black: Formateo de código
+# ├── ruff: Linting rápido
+# ├── pre-commit: Hooks de git
+# └── mypy-extensions: Type checking
+```
+
+### 📊 **Análisis de Cobertura Detallado**
+
+```bash
+# Ver líneas específicas sin cobertura
+coverage report -m
+
+# Generar reporte XML (para CI/CD)
+coverage xml
+
+# Reporte con skip de líneas ya cubiertas
+coverage report --skip-covered
+
+# Verificar cobertura mínima (falla si < 35%)
+coverage report --fail-under=35
+```
+
+**🔍 Analiza el reporte HTML en `htmlcov/index.html` para:**
+- Líneas exactas sin cobertura (en rojo)
+- Branches no ejecutados (en amarillo)
+- Funciones completamente testeadas (en verde)
+- Métricas detalladas por archivo
 
 ---
 
