@@ -1,3 +1,17 @@
+#Link de Kanban
+
+https://github.com/users/CamiloRosadaC/projects/1/views/1
+
+#Integrantes
+
+Camilo Eduardo Rosada Caicedo - 2205121 - 
+
+Edilmer chachinoy narvaez - 22501262 
+
+Ivan Rodrigo Castillo Cañas - 22502346 
+
+Dario Fernando Narvaez Guevara - 22500268
+
 # Detección, Seguimiento y Conteo de Vehículos en Tiempo Real (YOLOv11 + Supervision + MLflow)
 
 Este proyecto detecta, sigue y cuenta vehículos (carros y motos) en tiempo real a partir de un video cargado manualmente o la webcam. Mantiene un inventario por tipo de vehículo con capacidades configurables y genera una alarma visual y auditiva cuando se excede la capacidad definida para cada tipo.  
@@ -495,21 +509,6 @@ Ver **[MLFLOW_INTEGRATION.md](MLFLOW_INTEGRATION.md)** para:
 - Personalización de experimentos
 - Análisis de métricas
 - Cases de uso detallados
-
----
-
-## 📌 Próximos pasos
-- ~~Integración con **MLflow** para registrar parámetros, métricas y artefactos (CSV).~~ ✅ **IMPLEMENTADO**
-- ~~**MLflow Model Registry** con versionado automático~~ ✅ **IMPLEMENTADO v2.1**
-- ~~**Visualizaciones automáticas** de métricas~~ ✅ **IMPLEMENTADO v2.1**  
-- ~~**Información del sistema** (hardware/software)~~ ✅ **IMPLEMENTADO v2.1**
-- ~~**Ventana única OpenCV** sin duplicados~~ ✅ **IMPLEMENTADO v2.1**
-- Configuración de **docker-compose** para levantar `inference` (gRPC) + `ui` (Streamlit).  
-- Añadir **CI/CD** con GitHub Actions (pytest + coverage).  
-- Documentar **flujo Gitflow y Kanban** en el repo.
-
----
-
 
 ---
 
