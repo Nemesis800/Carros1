@@ -30,6 +30,7 @@ class App(tk.Tk):
         self.var_enable_csv = tk.BooleanVar(value=self.config_data.enable_csv)
         self.var_csv_dir = tk.StringVar(value=self.config_data.csv_dir)
         self.var_csv_name = tk.StringVar(value=self.config_data.csv_name or "Registro")
+        
 
         self._build_ui()
 

@@ -75,6 +75,9 @@ class VideoProcessor(threading.Thread):
         # Estados para alarma de capacidad (evitar beeps repetidos por frame)
         self._prev_over_car = False
         self._prev_over_moto = False
+        
+        # Nombre de ventana OpenCV (se asigna al crearla)
+        self.active_window_name = None
 
         # CSV y acumuladores de conteo (para detectar incrementos)
         self.csv_fp = None
@@ -420,6 +423,14 @@ class VideoProcessor(threading.Thread):
         cap = None
         frame_start_time = None
         
+        # LIMPIEZA PREVENTIVA: Destruir todas las ventanas OpenCV antes de empezar
+        try:
+            cv2.destroyAllWindows()
+            for _ in range(5):  # Múltiples llamadas para Windows
+                cv2.waitKey(1)
+        except Exception:
+            pass
+        
         # Inicializar MLflow al inicio
         self._init_mlflow()
         
@@ -473,8 +484,23 @@ class VideoProcessor(threading.Thread):
 
             # 6) Ventana UI si display=True
             if self.display:
-                cv2.namedWindow(WINDOW_NAME, cv2.WINDOW_NORMAL)
-                cv2.resizeWindow(WINDOW_NAME, min(1280, w), min(720, h))
+                # Destruir TODAS las ventanas OpenCV existentes
+                cv2.destroyAllWindows()
+                cv2.waitKey(1)
+                cv2.waitKey(1)  # Doble llamada para Windows
+                
+                # Crear ventana con nombre único y timestamp
+                import time
+                timestamp = int(time.time() * 1000)  # timestamp en milisegundos
+                window_name = f"VehicleCounter_{timestamp}"
+                
+                # Crear ventana con parámetros específicos
+                cv2.namedWindow(window_name, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO | cv2.WINDOW_GUI_NORMAL)
+                cv2.resizeWindow(window_name, min(1280, w), min(720, h))
+                
+                # Guardar el nombre de ventana para uso posterior
+                self.active_window_name = window_name
+                print(f"🗺️ Ventana OpenCV creada: {window_name}")
 
             pending_first = True  # ya tenemos el 1er frame leído
             processed = 0
@@ -608,28 +634,10 @@ class VideoProcessor(threading.Thread):
                 
                 self._log_detection_metrics(detections_count, car_detections, moto_detections, current_fps)
                 self._log_counting_metrics(car_in, car_out, car_inv, moto_in, moto_out, moto_inv)
-                    
-                # Contar detecciones por clase
-                car_detections = sum(1 for i in range(len(tracked)) 
-                                   if tracked.data.get("class_name", [""])[i] == "car")
-                moto_detections = sum(1 for i in range(len(tracked)) 
-                                    if tracked.data.get("class_name", [""])[i] == "motorcycle")
-                
-                self._log_detection_metrics(
-                    detections_count=len(tracked),
-                    car_count=car_detections,
-                    moto_count=moto_detections,
-                    fps=current_fps
-                )
-                
-                self._log_counting_metrics(
-                    car_in=car_in, car_out=car_out, car_inv=car_inv,
-                    moto_in=moto_in, moto_out=moto_out, moto_inv=moto_inv
-                )
 
                 # 7.9) Mostrar / callbacks
                 if self.display:
-                    cv2.imshow(WINDOW_NAME, draw_frame)
+                    cv2.imshow(self.active_window_name, draw_frame)
                     key = cv2.waitKey(1) & 0xFF
                     if key == ord('q'):
                         self.stop_event.set()
@@ -666,9 +674,14 @@ class VideoProcessor(threading.Thread):
                 pass
             if self.display:
                 try:
-                    cv2.destroyWindow(WINDOW_NAME)
-                    cv2.waitKey(1)
+                    # Limpieza específica de la ventana creada
+                    if hasattr(self, 'active_window_name'):
+                        cv2.destroyWindow(self.active_window_name)
+                    # Destruir todas las ventanas como respaldo
                     cv2.destroyAllWindows()
+                    # Múltiples llamadas para asegurar limpieza en Windows
+                    for _ in range(3):
+                        cv2.waitKey(1)
                 except Exception:
                     pass
 
