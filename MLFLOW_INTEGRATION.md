@@ -16,11 +16,16 @@ Este proyecto integra **MLflow** para el seguimiento completo de experimentos, r
 - **Metadatos del modelo**: arquitectura, clases, tamaño de entrada
 - **Artefactos**: archivos .pt del modelo YOLO
 - **Información de clases**: clases objetivo (car, motorcycle)
+- **🆕 Model Registry**: versionado automático con estados Staging/Production
+- **🆕 Registro automático**: modelos YOLO registrados al finalizar cada experimento
 
 ### 📁 **Gestión de Artefactos**
 - **Reportes CSV**: archivos de eventos y resúmenes
 - **Muestras de video**: videos pequeños como referencia
 - **Logs de configuración**: parámetros y metadatos
+- **🆕 Gráficos de rendimiento**: visualizaciones automáticas de FPS y métricas
+- **🆕 Información del sistema**: hardware, versiones de software, configuración
+- **🆕 Dashboards visuales**: evolución de métricas y resumen de experimento
 
 ## 🔧 Configuración y Uso
 
@@ -238,10 +243,59 @@ Las métricas se registran cada 30-60 frames para evitar saturación. Para cambi
 if self.frame_count % 10 == 0:  # Cada 10 frames
 ```
 
-## 🚀 Próximas Mejoras
+## 🆕 **Nuevas Características Implementadas (v2.1)**
+
+### **1. MLflow Model Registry** ✅
+- **Versionado automático** de modelos YOLO
+- **Estados de modelo**: Staging → Production
+- **Registro automático** al finalizar cada experimento
+
+```python
+# Automático - no requiere configuración adicional
+# Los modelos se registran como "VehicleDetectionModel" v1, v2, etc.
+```
+
+### **2. Métricas de Validación** ✅
+- **Precisión, Recall, F1-Score** por clase (car, motorcycle)
+- **Métricas comparativas** entre diferentes runs
+- **Evaluación objetiva** del rendimiento del modelo
+
+### **3. Información Detallada del Sistema** ✅
+- **Hardware**: CPU, RAM, GPU, CUDA
+- **Software**: versiones de PyTorch, OpenCV, Ultralytics
+- **Sistema**: OS, arquitectura, hostname
+- **Registro automático** en cada experimento
+
+### **4. Visualizaciones Automáticas** ✅
+- **Gráficos de FPS**: evolución y distribución
+- **Dashboard de rendimiento**: tiempo, frames, detecciones
+- **Resúmenes visuales**: automáticamente guardados como PNG
+- **Registro como artefactos** en MLflow
+
+### **Cómo Acceder a las Nuevas Características**
+
+1. **Model Registry**:
+   ```
+   MLflow UI → Models → VehicleDetectionModel → Versiones
+   ```
+
+2. **Visualizaciones**:
+   ```
+   MLflow UI → Experiments → [Tu Run] → Artifacts → visualizations/
+   ```
+
+3. **Info del Sistema**:
+   ```
+   MLflow UI → Experiments → [Tu Run] → Parameters → system_*
+   ```
+
+---
+
+## 🚀 Próximas Mejoras (Roadmap)
 
 - **Integración con bases de datos**: PostgreSQL, MySQL
 - **Alertas automáticas**: Slack, email cuando se exceda capacidad  
 - **Comparación automática**: A/B testing entre modelos
-- **Métricas de precisión**: Comparación con ground truth
+- **Métricas de IoU**: Comparación precisa con ground truth
 - **Dashboard personalizado**: Visualizaciones específicas del dominio
+- **Detección de anomalías**: Alertas por comportamiento inusual

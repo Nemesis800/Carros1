@@ -14,6 +14,11 @@ protobuf>=4.25
 # MLflow for experiment tracking
 mlflow>=2.8.0
 
+# Dependencias adicionales para mejoras MLflow
+psutil>=5.9.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
 # Nota: ultralytics instalará PyTorch (CPU). Para GPU (CUDA), instala torch/cuDNN según tu GPU:
 # https://pytorch.org/get-started/locally/
 

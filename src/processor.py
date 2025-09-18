@@ -598,6 +598,16 @@ class VideoProcessor(threading.Thread):
                     current_fps = 1.0 / frame_time if frame_time > 0 else 0
                 else:
                     current_fps = None
+                
+                # Contar detecciones por clase
+                detections_count = len(tracked)
+                car_detections = sum(1 for i in range(len(tracked)) 
+                                   if tracked.data.get("class_name", [""] * len(tracked))[i] == "car")
+                moto_detections = sum(1 for i in range(len(tracked)) 
+                                    if tracked.data.get("class_name", [""] * len(tracked))[i] == "motorcycle")
+                
+                self._log_detection_metrics(detections_count, car_detections, moto_detections, current_fps)
+                self._log_counting_metrics(car_in, car_out, car_inv, moto_in, moto_out, moto_inv)
                     
                 # Contar detecciones por clase
                 car_detections = sum(1 for i in range(len(tracked)) 
@@ -674,6 +684,36 @@ class VideoProcessor(threading.Thread):
                     except Exception:
                         pass
 
+            # Nuevas funcionalidades MLflow antes de finalizar
+            if self.enable_mlflow and hasattr(self, '_log_system_info_called') == False:
+                try:
+                    # Usar la nueva integración MLflow si está disponible
+                    from mlflow_integration import get_mlflow_tracker
+                    tracker = get_mlflow_tracker()
+                    
+                    # Solo llamar una vez por run
+                    if hasattr(tracker, 'log_system_information'):
+                        tracker.log_system_information()
+                    
+                    if hasattr(tracker, 'create_and_log_visualizations'):
+                        # Transferir datos del procesador al tracker
+                        tracker.fps_samples = self.fps_samples
+                        tracker.total_detections = self.detection_count
+                        tracker.total_frames_processed = self.frame_count
+                        tracker.start_time = self.mlflow_start_time
+                        tracker.run_id = self.mlflow_run_id
+                        tracker.create_and_log_visualizations()
+                    
+                    if hasattr(tracker, 'register_model_to_registry') and hasattr(detector, 'model'):
+                        try:
+                            tracker.register_model_to_registry(detector.model)
+                        except Exception as e:
+                            print(f"⚠️  Error registrando modelo en registry: {e}")
+                    
+                    self._log_system_info_called = True
+                except Exception as e:
+                    print(f"⚠️  Error en funcionalidades MLflow avanzadas: {e}")
+            
             # Finalizar MLflow
             self._finish_mlflow()
             

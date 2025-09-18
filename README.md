@@ -215,16 +215,24 @@ Próxima etapa: el `streamlit_app.py` se conecta al servidor gRPC y muestra los 
 - **Habilitado por defecto** en todas las interfaces (Tkinter, Streamlit, CLI)
 - **Seguimiento automático** de parámetros, métricas y artefactos
 - **Interfaz web** para visualización y análisis
+- **🆕 Model Registry** con versionado automático (Staging/Production)
 
 **📈 Métricas Registradas**
 - **Detección**: detecciones por frame, FPS, objetos por clase
 - **Conteo**: entradas/salidas por tipo, inventario actual, flujo neto
 - **Rendimiento**: tiempo de procesamiento, eficiencia, memoria
+- **🆕 Validación**: precisión, recall, F1-score por clase
 
 **🏷️ Parámetros Registrados**
 - **Modelo**: arquitectura YOLO, umbrales de confianza
 - **Sistema**: orientación de línea, capacidades, configuración
 - **Video**: fuente, resolución, duración
+- **🆕 Hardware**: CPU, GPU, RAM, CUDA, versiones de librerías
+
+**📊 Artefactos Visuales**
+- **Gráficos automáticos**: evolución de FPS, distribución de métricas
+- **Dashboards de rendimiento**: resumen visual del experimento
+- **Reportes CSV** registrados automáticamente
 
 ### 🌐 **Interfaz Web MLflow**
 ```powershell

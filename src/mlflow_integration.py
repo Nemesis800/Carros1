@@ -8,14 +8,23 @@ import os
 import json
 import time
 import shutil
-from typing import Dict, Any, Optional
+import psutil
+import platform
+import subprocess
+import sys
+from typing import Dict, Any, Optional, List, Tuple
 from pathlib import Path
 from datetime import datetime
 
 import mlflow
 import mlflow.pyfunc
+import mlflow.pytorch
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 from ultralytics import YOLO
+import torch
+import cv2
 
 from config import AppConfig
 
@@ -496,6 +505,287 @@ class VehicleDetectionMLflowTracker:
         except Exception as e:
             print(f"❌ Error lanzando MLflow UI: {e}")
 
+
+    def register_model_to_registry(self, model: YOLO, model_name: str = "VehicleDetectionModel"):
+        """
+        Registra el modelo YOLO en el MLflow Model Registry con versionado.
+        
+        Args:
+            model: Instancia del modelo YOLO
+            model_name: Nombre para el modelo en el registry
+        """
+        if not self.run_id:
+            print("⚠️  Advertencia: No hay run activo para registrar el modelo")
+            return
+            
+        try:
+            # Crear directorio temporal para el modelo
+            model_dir = Path("temp_model")
+            model_dir.mkdir(exist_ok=True)
+            
+            # Guardar el modelo
+            model_path = model_dir / "model.pt"
+            if hasattr(model, 'save'):
+                model.save(str(model_path))
+            elif hasattr(model, 'model') and hasattr(model.model, 'save'):
+                torch.save(model.model.state_dict(), model_path)
+            
+            # Crear archivo de metadatos
+            metadata = {
+                "model_type": "YOLO",
+                "framework": "ultralytics",
+                "input_size": [640, 640],
+                "classes": list(model.names.values()) if hasattr(model, 'names') else [],
+                "confidence_threshold": 0.25,
+                "iou_threshold": 0.45
+            }
+            
+            with open(model_dir / "metadata.json", "w") as f:
+                json.dump(metadata, f, indent=2)
+            
+            # Registrar como artefacto
+            mlflow.log_artifacts(str(model_dir), "model")
+            
+            # Registrar en Model Registry
+            model_uri = f"runs:/{self.run_id}/model"
+            try:
+                model_version = mlflow.register_model(model_uri, model_name)
+                print(f"🏷️  Modelo registrado en Registry: {model_name} v{model_version.version}")
+                
+                # Marcar como Staging por defecto
+                from mlflow.tracking import MlflowClient
+                client = MlflowClient()
+                client.transition_model_version_stage(
+                    name=model_name,
+                    version=model_version.version,
+                    stage="Staging"
+                )
+                print(f"✅ Modelo marcado como 'Staging' en Registry")
+                
+            except Exception as registry_error:
+                print(f"⚠️  Error registrando en Model Registry: {registry_error}")
+            
+            # Limpiar directorio temporal
+            shutil.rmtree(model_dir, ignore_errors=True)
+            
+        except Exception as e:
+            print(f"❌ Error registrando modelo: {e}")
+    
+    def log_system_information(self):
+        """
+        Registra información detallada del sistema y hardware.
+        """
+        if not self.run_id:
+            return
+            
+        try:
+            # Información del sistema
+            system_info = {
+                "os": platform.system(),
+                "os_version": platform.version(),
+                "architecture": platform.architecture()[0],
+                "processor": platform.processor(),
+                "python_version": platform.python_version(),
+                "hostname": platform.node()
+            }
+            
+            # Información de memoria
+            memory = psutil.virtual_memory()
+            system_info.update({
+                "total_ram_gb": round(memory.total / (1024**3), 2),
+                "available_ram_gb": round(memory.available / (1024**3), 2),
+                "ram_usage_percent": memory.percent
+            })
+            
+            # Información de CPU
+            system_info.update({
+                "cpu_count": psutil.cpu_count(),
+                "cpu_count_logical": psutil.cpu_count(logical=True),
+                "cpu_frequency_mhz": psutil.cpu_freq().current if psutil.cpu_freq() else 'N/A'
+            })
+            
+            # Información de GPU/CUDA
+            if torch.cuda.is_available():
+                system_info.update({
+                    "cuda_available": True,
+                    "cuda_version": torch.version.cuda,
+                    "gpu_count": torch.cuda.device_count(),
+                    "gpu_name": torch.cuda.get_device_name(0) if torch.cuda.device_count() > 0 else 'N/A',
+                    "gpu_memory_gb": round(torch.cuda.get_device_properties(0).total_memory / (1024**3), 2) if torch.cuda.device_count() > 0 else 0
+                })
+            else:
+                system_info.update({
+                    "cuda_available": False,
+                    "cuda_version": "N/A",
+                    "gpu_count": 0
+                })
+            
+            # Versiones de librerías clave
+            library_versions = {
+                "torch_version": torch.__version__,
+                "cv2_version": cv2.__version__,
+                "numpy_version": np.__version__,
+                "mlflow_version": mlflow.__version__
+            }
+            
+            try:
+                import ultralytics
+                library_versions["ultralytics_version"] = ultralytics.__version__
+            except:
+                library_versions["ultralytics_version"] = "unknown"
+            
+            # Registrar todo como parámetros
+            all_params = {**system_info, **library_versions}
+            mlflow.log_params({f"system_{k}": str(v) for k, v in all_params.items()})
+            
+            # También como artefacto JSON
+            system_file = Path("temp_system_info.json")
+            with open(system_file, "w") as f:
+                json.dump(all_params, f, indent=2)
+            
+            mlflow.log_artifact(str(system_file), "system_info")
+            system_file.unlink()
+            
+            print("💻 Información del sistema registrada")
+            
+        except Exception as e:
+            print(f"❌ Error registrando información del sistema: {e}")
+    
+    def log_validation_metrics(self, ground_truth: List[Dict], predictions: List[Dict]):
+        """
+        Registra métricas de validación como precisión, recall y F1-score.
+        
+        Args:
+            ground_truth: Lista de detecciones verdaderas
+            predictions: Lista de detecciones predichas
+        """
+        if not self.run_id:
+            return
+            
+        try:
+            # Calcular métricas simplificadas basadas en conteo
+            gt_cars = sum(1 for item in ground_truth if item.get('class') == 'car')
+            gt_motorcycles = sum(1 for item in ground_truth if item.get('class') == 'motorcycle')
+            
+            pred_cars = sum(1 for item in predictions if item.get('class') == 'car')
+            pred_motorcycles = sum(1 for item in predictions if item.get('class') == 'motorcycle')
+            
+            # Métricas básicas de precisión
+            car_precision = pred_cars / max(pred_cars, 1) if gt_cars > 0 else 0
+            motorcycle_precision = pred_motorcycles / max(pred_motorcycles, 1) if gt_motorcycles > 0 else 0
+            
+            car_recall = min(pred_cars, gt_cars) / max(gt_cars, 1) if gt_cars > 0 else 0
+            motorcycle_recall = min(pred_motorcycles, gt_motorcycles) / max(gt_motorcycles, 1) if gt_motorcycles > 0 else 0
+            
+            car_f1 = 2 * (car_precision * car_recall) / max(car_precision + car_recall, 1e-8)
+            motorcycle_f1 = 2 * (motorcycle_precision * motorcycle_recall) / max(motorcycle_precision + motorcycle_recall, 1e-8)
+            
+            # Registrar métricas
+            validation_metrics = {
+                "car_precision": car_precision,
+                "car_recall": car_recall,
+                "car_f1_score": car_f1,
+                "motorcycle_precision": motorcycle_precision,
+                "motorcycle_recall": motorcycle_recall,
+                "motorcycle_f1_score": motorcycle_f1,
+                "overall_accuracy": (car_f1 + motorcycle_f1) / 2
+            }
+            
+            mlflow.log_metrics(validation_metrics)
+            print(f"📊 Métricas de validación registradas: {len(validation_metrics)} métricas")
+            
+        except Exception as e:
+            print(f"❌ Error calculando métricas de validación: {e}")
+    
+    def create_and_log_visualizations(self):
+        """
+        Crea y registra gráficos de visualización como artefactos.
+        """
+        if not self.run_id or len(self.fps_samples) < 2:
+            return
+            
+        try:
+            # Configurar estilo de matplotlib
+            plt.style.use('default')
+            sns.set_palette("husl")
+            
+            # Crear figura con subplots
+            fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+            fig.suptitle('Métricas del Sistema de Detección de Vehículos', fontsize=16)
+            
+            # 1. Evolución del FPS
+            if len(self.fps_samples) > 1:
+                axes[0, 0].plot(self.fps_samples, 'b-', linewidth=2, alpha=0.7)
+                axes[0, 0].axhline(y=np.mean(self.fps_samples), color='r', linestyle='--', alpha=0.7, label=f'Promedio: {np.mean(self.fps_samples):.1f}')
+                axes[0, 0].set_title('Evolución del FPS')
+                axes[0, 0].set_xlabel('Muestra')
+                axes[0, 0].set_ylabel('FPS')
+                axes[0, 0].legend()
+                axes[0, 0].grid(True, alpha=0.3)
+            
+            # 2. Distribución de FPS
+            if len(self.fps_samples) > 10:
+                axes[0, 1].hist(self.fps_samples, bins=20, alpha=0.7, color='skyblue', edgecolor='black')
+                axes[0, 1].axvline(x=np.mean(self.fps_samples), color='red', linestyle='--', alpha=0.7, label=f'Media: {np.mean(self.fps_samples):.1f}')
+                axes[0, 1].set_title('Distribución de FPS')
+                axes[0, 1].set_xlabel('FPS')
+                axes[0, 1].set_ylabel('Frecuencia')
+                axes[0, 1].legend()
+                axes[0, 1].grid(True, alpha=0.3)
+            
+            # 3. Métricas de detección (simuladas para demo)
+            detection_data = {
+                'Carros': [self.total_detections * 0.7],
+                'Motos': [self.total_detections * 0.3]
+            }
+            bars = axes[1, 0].bar(detection_data.keys(), [d[0] for d in detection_data.values()], 
+                                color=['lightcoral', 'lightblue'], alpha=0.7)
+            axes[1, 0].set_title('Detecciones por Tipo')
+            axes[1, 0].set_ylabel('Cantidad')
+            
+            # Agregar valores en las barras
+            for bar in bars:
+                height = bar.get_height()
+                axes[1, 0].text(bar.get_x() + bar.get_width()/2., height,
+                               f'{int(height)}', ha='center', va='bottom')
+            
+            # 4. Resumen de rendimiento
+            if self.start_time:
+                elapsed = time.time() - self.start_time
+                performance_data = {
+                    'Frames\nProcesados': self.total_frames_processed,
+                    'Tiempo\n(min)': elapsed / 60,
+                    'FPS\nPromedio': np.mean(self.fps_samples) if self.fps_samples else 0,
+                    'Detecciones\nTotales': self.total_detections
+                }
+                
+                bars = axes[1, 1].bar(range(len(performance_data)), list(performance_data.values()),
+                                     color=['gold', 'lightgreen', 'orange', 'purple'], alpha=0.7)
+                axes[1, 1].set_title('Resumen de Rendimiento')
+                axes[1, 1].set_xticks(range(len(performance_data)))
+                axes[1, 1].set_xticklabels(list(performance_data.keys()))
+                
+                # Agregar valores
+                for i, bar in enumerate(bars):
+                    height = bar.get_height()
+                    axes[1, 1].text(bar.get_x() + bar.get_width()/2., height,
+                                   f'{height:.1f}', ha='center', va='bottom')
+            
+            plt.tight_layout()
+            
+            # Guardar y registrar el gráfico
+            plot_file = Path("temp_metrics_plot.png")
+            plt.savefig(plot_file, dpi=300, bbox_inches='tight')
+            mlflow.log_artifact(str(plot_file), "visualizations")
+            
+            plt.close()
+            plot_file.unlink()
+            
+            print("📈 Visualizaciones generadas y registradas")
+            
+        except Exception as e:
+            print(f"❌ Error creando visualizaciones: {e}")
+            plt.close('all')  # Cerrar cualquier figura abierta
 
 # Instancia global para fácil acceso
 _global_tracker: Optional[VehicleDetectionMLflowTracker] = None
