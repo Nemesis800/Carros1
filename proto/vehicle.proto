@@ -1,0 +1,42 @@
+syntax = "proto3";
+package vehicle;
+
+message AppConfigMsg {
+  string model_name = 1;        // "yolo11n.pt" | "yolov8n.pt" | "yolo12n.pt"
+  float  conf = 2;              // 0.1..0.8
+  float  iou = 3;               // default 0.5
+  string device = 4;            // "", "cuda:0", etc. (opcional)
+  string line_orientation = 5;  // "horizontal" | "vertical"
+  float  line_position = 6;     // 0.1..0.9
+  bool   invert_direction = 7;
+  int32  capacity_car = 8;
+  int32  capacity_moto = 9;
+  bool   enable_csv = 10;
+  string csv_dir = 11;
+  string csv_name = 12;
+}
+
+message ProcessVideoRequest {
+  string video_path = 1;   // ruta al archivo de video en el servidor
+  AppConfigMsg config = 2;
+  bool stream_frames = 3;  // si true, envía frames como JPEG
+}
+
+message ProcessWebcamRequest {
+  int32 cam_id = 1;        // default 0
+  AppConfigMsg config = 2;
+  bool stream_frames = 3;
+}
+
+message ProcessUpdate {
+  float  progress = 1;         // 0..1 (si se conoce total frames)
+  bytes  frame_jpeg = 2;       // opcional (si stream_frames==true)
+  string csv_path = 3;         // se llena al finalizar
+  string error = 4;            // en caso de error
+  bool   done = 5;             // true cuando terminó
+}
+
+service VehicleService {
+  rpc ProcessVideo(ProcessVideoRequest) returns (stream ProcessUpdate);
+  rpc ProcessWebcam(ProcessWebcamRequest) returns (stream ProcessUpdate);
+}

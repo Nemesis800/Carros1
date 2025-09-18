@@ -6,5 +6,11 @@ matplotlib>=3.7
 pillow>=10.0.0
 streamlit>=1.38
 
+# gRPC
+grpcio>=1.62
+grpcio-tools>=1.62
+protobuf>=4.25
+
 # Nota: ultralytics instalará PyTorch (CPU). Para GPU (CUDA), instala torch/cuDNN según tu GPU:
 # https://pytorch.org/get-started/locally/
+
