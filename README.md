@@ -17,8 +17,10 @@ Incluye:
 - **Ultralytics YOLO v8/v11/v12** – detección de objetos
 - **🆕 MLflow** – seguimiento de experimentos, métricas y gestión de modelos
 - **Supervision (ByteTrack)** – seguimiento y anotación
-- **OpenCV** – lectura de video y visualización
+- **OpenCV** – lectura de video y visualización optimizada
 - **Tkinter / Streamlit** – interfaces gráficas
+- **Matplotlib / Seaborn** – visualizaciones automáticas
+- **psutil** – información del sistema
 - **Pytest / Coverage** – pruebas y reportes
 - **gRPC / Protobuf** – comunicación entre servicios
 - **Docker / Makefile** – despliegue y automatización
@@ -28,11 +30,15 @@ Incluye:
 ## ✨ Características
 - Detección y conteo de vehículos en tiempo real.
 - Seguimiento multi-objeto con IDs únicos.
+- **🗺️ Interfaz optimizada**: Ventana única OpenCV sin ventanas duplicadas.
 - Inventario dinámico con alarmas visuales/sonoras.
 - **🆕 Seguimiento automático de experimentos con MLflow**:
   - Registro de parámetros de configuración
   - Métricas en tiempo real (FPS, detecciones, conteos)
   - Gestión de artefactos (CSV, modelos)
+  - **Model Registry** con versionado automático
+  - **Visualizaciones automáticas** de métricas
+  - **Información del sistema** (hardware, software)
   - Interfaz web para visualización de experimentos
 - Exportación de reportes CSV (IN/OUT y SUMMARY) con registro en MLflow.
 - Modo CLI headless para entornos sin interfaz gráfica.
@@ -229,10 +235,17 @@ Próxima etapa: el `streamlit_app.py` se conecta al servidor gRPC y muestra los 
 - **Video**: fuente, resolución, duración
 - **🆕 Hardware**: CPU, GPU, RAM, CUDA, versiones de librerías
 
-**📊 Artefactos Visuales**
+**📊 Artefactos Visuales** ✅ **IMPLEMENTADO v2.1**
 - **Gráficos automáticos**: evolución de FPS, distribución de métricas
-- **Dashboards de rendimiento**: resumen visual del experimento
+- **Dashboards de rendimiento**: 4 gráficos por experimento
+- **Visualizaciones PNG**: guardadas automáticamente como artefactos
 - **Reportes CSV** registrados automáticamente
+
+**🔧 Mejoras de Interfaz** ✅ **IMPLEMENTADO v2.1**
+- **Ventana única OpenCV**: eliminadas ventanas grises duplicadas
+- **Gestión determinista**: nombres de ventana con timestamp
+- **Limpieza robusta**: sin residuos al cerrar aplicación
+- **Optimizado para Windows**: múltiples waitKey() calls
 
 ### 🌐 **Interfaz Web MLflow**
 ```powershell
@@ -263,6 +276,10 @@ Ver **[MLFLOW_INTEGRATION.md](MLFLOW_INTEGRATION.md)** para:
 
 ## 📌 Próximos pasos
 - ~~Integración con **MLflow** para registrar parámetros, métricas y artefactos (CSV).~~ ✅ **IMPLEMENTADO**
+- ~~**MLflow Model Registry** con versionado automático~~ ✅ **IMPLEMENTADO v2.1**
+- ~~**Visualizaciones automáticas** de métricas~~ ✅ **IMPLEMENTADO v2.1**  
+- ~~**Información del sistema** (hardware/software)~~ ✅ **IMPLEMENTADO v2.1**
+- ~~**Ventana única OpenCV** sin duplicados~~ ✅ **IMPLEMENTADO v2.1**
 - Configuración de **docker-compose** para levantar `inference` (gRPC) + `ui` (Streamlit).  
 - Añadir **CI/CD** con GitHub Actions (pytest + coverage).  
 - Documentar **flujo Gitflow y Kanban** en el repo.

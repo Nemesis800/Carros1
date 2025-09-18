@@ -272,6 +272,12 @@ if self.frame_count % 10 == 0:  # Cada 10 frames
 - **Resúmenes visuales**: automáticamente guardados como PNG
 - **Registro como artefactos** en MLflow
 
+### **5. Optimizaciones de Interfaz** ✅
+- **Ventana única OpenCV**: eliminación de ventanas grises duplicadas
+- **Nombres deterministas**: ventanas con timestamp único
+- **Limpieza robusta**: gestión completa de recursos OpenCV
+- **Optimización Windows**: múltiples waitKey() para compatibilidad
+
 ### **Cómo Acceder a las Nuevas Características**
 
 1. **Model Registry**:
@@ -287,6 +293,14 @@ if self.frame_count % 10 == 0:  # Cada 10 frames
 3. **Info del Sistema**:
    ```
    MLflow UI → Experiments → [Tu Run] → Parameters → system_*
+   ```
+
+4. **Interfaz Optimizada**:
+   ```
+   Al ejecutar: python src/app.py
+   - Solo se abre una ventana OpenCV limpia
+   - Sin ventanas grises duplicadas
+   - Gestión automática de recursos
    ```
 
 ---
