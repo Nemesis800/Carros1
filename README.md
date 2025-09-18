@@ -299,3 +299,105 @@ Ver **[MLFLOW_INTEGRATION.md](MLFLOW_INTEGRATION.md)** para:
 - Documentar **flujo Gitflow y Kanban** en el repo.
 
 ---
+
+
+---
+
+## 📂 Estructura del Proyecto
+
+```
+Contador-de-Vehiculos/
+├── src/                    # Código fuente principal
+│   ├── app.py              # Entrada principal (CLI / UI Tkinter)
+│   ├── cli.py              # Interfaz de línea de comandos
+│   ├── config.py           # Configuración central (AppConfig)
+│   ├── counter.py          # Lógica de conteo IN/OUT
+│   ├── detector.py         # Detector de vehículos (YOLO)
+│   ├── processor.py        # Procesador de video principal
+│   ├── ui_app.py           # Interfaz Tkinter
+│   ├── utils.py            # Utilidades generales
+│   └── ...
+│
+├── clients/                # Clientes gRPC
+│   └── grpc_client.py
+│
+├── services/               # Servidores gRPC
+│   └── inference_server.py
+│
+├── proto/                  # Definiciones Protobuf
+│   └── vehicle.proto
+│
+├── tests/                  # Pruebas automáticas (pytest)
+│   ├── test_app_csv.py
+│   ├── test_counter.py
+│   ├── test_detector_mapping.py
+│   ├── test_headless_integration.py
+│   └── ...
+│
+├── reports/                # CSV generados (ignorado en git)
+├── uploads/                # Videos subidos por UI Streamlit
+├── mlruns/                 # Experimentos MLflow (ignorado en git)
+│
+├── streamlit_app.py        # Interfaz web alternativa
+├── launch_mlflow_ui.py     # Script para abrir MLflow UI
+├── Dockerfile              # Imagen Docker del proyecto
+├── Makefile                # Automatización de comandos
+├── requirements.txt        # Dependencias de producción
+├── requirements-dev.txt    # Dependencias de desarrollo
+└── README.md               # Este archivo
+```
+
+---
+
+## 🏗️ Arquitectura General
+
+El sistema sigue una arquitectura **modular y desacoplada**:
+
+- **Procesador de Video (VideoProcessor)**  
+  Orquesta detección, tracking y conteo.  
+- **Detector (YOLO)**  
+  Se encarga de obtener bounding boxes y clases.  
+- **Counter (LineCrossingCounterByClass)**  
+  Calcula IN/OUT por clase y mantiene inventario.  
+- **Interfaces**  
+  - CLI (`cli.py`)  
+  - Tkinter (`ui_app.py`)  
+  - Streamlit (`streamlit_app.py`)  
+- **Servicios gRPC**  
+  - `inference_server.py`: procesamiento  
+  - `grpc_client.py`: cliente de pruebas  
+- **MLflow**  
+  - Registro automático de parámetros, métricas y CSV.  
+
+---
+
+## ⚡ Comandos útiles con Makefile
+
+Además de los ejemplos que ya tienes en el README:
+
+```bash
+# Ejecutar interfaz Tkinter
+make run-ui
+
+# Ejecutar servidor gRPC
+make serve
+
+# Cliente gRPC (procesa un video y muestra progreso)
+make grpc-client SRC="videos/prueba1.MP4"
+
+# Construir imagen Docker
+make docker-build
+
+# Ejecutar CLI dentro de Docker (headless)
+make docker-run-cli SRC="videos/prueba1.MP4"
+
+# Formatear código (black + isort + ruff)
+make format
+
+# Limpiar archivos temporales y CSV
+make clean
+```
+
+📌 Ejecuta `make help` para ver todos los comandos disponibles.  
+
+---
