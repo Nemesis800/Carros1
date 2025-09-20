@@ -496,12 +496,25 @@ mlflow ui --port 5000
 💡 **Nota**: Si la consola se bloquea, usa `Ctrl+C` y luego `exit`
 
 ### 📋 **Uso**
-MLflow funciona automáticamente:
-- **Tkinter**: `python src/app.py` 
-- **Streamlit**: `streamlit run streamlit_app.py`
-- **CLI**: `python src/app.py --cli --webcam`
+MLflow está deshabilitado por defecto. Para habilitarlo hay dos opciones:
 
-Todos los experimentos se registran automáticamente con métricas en tiempo real.
+1. **Temporal**: Agregar el argumento `--mlflow` al ejecutar la aplicación:
+   ```bash
+   # CLI con MLflow habilitado
+   python src/app.py --cli --webcam --mlflow
+   
+   # Streamlit con MLflow habilitado
+   streamlit run streamlit_app.py --mlflow
+   ```
+
+2. **Permanente**: Modificar la configuración en `src/config.py`:
+   ```python
+   class AppConfig:
+       # ... otros parámetros ...
+       enable_mlflow: bool = True  # Cambiar a True para habilitar MLflow
+   ```
+
+Cuando está habilitado, todos los experimentos se registran automáticamente con métricas en tiempo real.
 
 ### 📖 **Documentación Completa**
 Ver **[MLFLOW_INTEGRATION.md](MLFLOW_INTEGRATION.md)** para:

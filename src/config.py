@@ -62,3 +62,6 @@ class AppConfig:
     enable_csv: bool = True
     csv_dir: str = "resultados"  # Carpeta destino para guardar reportes
     csv_name: Optional[str] = "Registro"  # Nombre base del CSV
+
+    # --- Configuración de MLflow ---
+    enable_mlflow: bool = False  # Habilitar/deshabilitar integración con MLflow

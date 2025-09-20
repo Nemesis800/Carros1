@@ -68,7 +68,7 @@ class VideoProcessor(threading.Thread):
         self.on_progress = on_progress
 
         # MLflow
-        self.enable_mlflow = enable_mlflow and MLFLOW_AVAILABLE
+        self.enable_mlflow = (enable_mlflow and config.enable_mlflow and MLFLOW_AVAILABLE)
         self.experiment_name = experiment_name
         self.mlflow_tags = mlflow_tags or {}
         self.mlflow_run_id = None
