@@ -25,7 +25,7 @@ CACHE_DIR    := .ultralytics_cache
 ## Ejecutar en modo CLI (sin UI)
 run-cli:
 	@echo "[Make] Ejecutando en modo CLI..."
-	$(PYTHON) src/app.py --cli \
+	uv run -p .venv python src/app.py --cli \
 		--source "$(or $(SRC),$(SRC_VIDEO))" \
 		--model $(MODEL) \
 		--conf $(CONF) \
@@ -40,17 +40,17 @@ run-cli:
 ## Ejecutar en modo UI (Tkinter)
 run-ui:
 	@echo "[Make] Ejecutando en modo UI..."
-	$(PYTHON) src/app.py
+	uv run -p .venv python src/app.py
 
 ## Lanzar servidor gRPC
 serve:
 	@echo "[Make] Ejecutando servidor gRPC..."
-	$(PYTHON) services/inference_server.py
+	uv run -p .venv python services/inference_server.py
 
 ## Cliente gRPC (requiere un video como argumento)
 grpc-client:
 	@echo "[Make] Cliente gRPC..."
-	$(PYTHON) clients/grpc_client.py "$(or $(SRC),$(SRC_VIDEO))"
+	uv run -p .venv python clients/grpc_client.py "$(or $(SRC),$(SRC_VIDEO))"
 
 # ==========================================================
 # Docker
@@ -89,29 +89,29 @@ docker-run-cli:
 ## Ejecutar tests con pytest (modo simple)
 test:
 	@echo "[Make] Ejecutando tests..."
-	pytest -q
+	uv run -p .venv pytest -q
 
 ## Ejecutar tests con más detalle
 test-verbose:
 	@echo "[Make] Ejecutando tests con detalle..."
-	pytest -vv --tb=short
+	uv run -p .venv pytest -vv --tb=short
 
 ## Ejecutar tests específicos
 test-file:
 	@echo "[Make] Ejecutando test específico: $(TEST_FILE)"
-	pytest $(TEST_FILE) -vv
+	uv run -p .venv pytest $(TEST_FILE) -vv
 
 ## Ejecutar tests con cobertura
 test-coverage:
 	@echo "[Make] Ejecutando tests con cobertura..."
-	coverage run -m pytest -q
-	coverage report -m
+	uv run -p .venv coverage run -m pytest -q
+	uv run -p .venv coverage report -m
 
 ## Generar reporte HTML de cobertura
 coverage-html:
 	@echo "[Make] Generando reporte HTML de cobertura..."
-	coverage run -m pytest -q
-	coverage html
+	uv run -p .venv coverage run -m pytest -q
+	uv run -p .venv coverage html
 	@echo "Abre htmlcov/index.html en tu navegador"
 
 ## Ejecutar tests y abrir reporte de cobertura
@@ -140,39 +140,54 @@ test-all: clean-test
 ## Formatear código con Black
 format:
 	@echo "[Make] Formateando código..."
-	black src tests
+	uv run -p .venv black src tests
 
 ## Limpiar archivos temporales y reportes
 clean:
 	@echo "[Make] Limpiando..."
-	-rm -rf __pycache__ .pytest_cache .mypy_cache
-	-rm -rf $(REPORTS_DIR)/*.csv
+	-if exist __pycache__ rd /s /q __pycache__
+	-if exist .pytest_cache rd /s /q .pytest_cache
+	-if exist .mypy_cache rd /s /q .mypy_cache
+	-if exist "$(REPORTS_DIR)\*.csv" del /q "$(REPORTS_DIR)\*.csv"
 
 ## Limpiar archivos de tests y cobertura
 clean-test:
 	@echo "[Make] Limpiando archivos de test..."
-	-rm -rf .pytest_cache
-	-rm -rf htmlcov
-	-rm -f .coverage
-	-rm -f coverage.xml
+	-if exist .pytest_cache rd /s /q .pytest_cache
+	-if exist htmlcov rd /s /q htmlcov
+	-if exist .coverage del /q .coverage
+	-if exist coverage.xml del /q coverage.xml
 
 ## Ayuda: lista todas las reglas
 help:
-	@echo "====================================="
-	@echo "Comandos disponibles:"
-	@echo "====================================="
-	@echo ""
-	@echo "EJECUCIÓN:"
-	@grep -E '^## ' Makefile | grep -E '(run-|serve|grpc)' | sed -e 's/## /  /'
-	@echo ""
-	@echo "TESTING:"
-	@grep -E '^## ' Makefile | grep -E '(test|coverage)' | sed -e 's/## /  /'
-	@echo ""
-	@echo "DOCKER:"
-	@grep -E '^## ' Makefile | grep -E 'docker' | sed -e 's/## /  /'
-	@echo ""
-	@echo "UTILIDADES:"
-	@grep -E '^## ' Makefile | grep -E '(format|clean|help)' | sed -e 's/## /  /'
-	@echo ""
-	@echo "====================================="
+	@echo =====================================
+	@echo Comandos disponibles:
+	@echo =====================================
+	@echo.
+	@echo EJECUCION:
+	@echo   run-ui         - Ejecutar en modo UI (Tkinter)
+	@echo   run-cli        - Ejecutar en modo CLI (sin UI)
+	@echo   serve          - Lanzar servidor gRPC
+	@echo   grpc-client    - Cliente gRPC (requiere un video como argumento)
+	@echo.
+	@echo TESTING:
+	@echo   test          - Ejecutar tests con pytest (modo simple)
+	@echo   test-verbose  - Ejecutar tests con mas detalle
+	@echo   test-file     - Ejecutar tests especificos
+	@echo   test-coverage - Ejecutar tests con cobertura
+	@echo   coverage-html - Generar reporte HTML de cobertura
+	@echo   test-fast     - Ejecutar tests rapidos
+	@echo   test-integration - Ejecutar tests de integracion
+	@echo   test-all      - Verificar que todos los tests pasan
+	@echo.
+	@echo DOCKER:
+	@echo   docker-build  - Construir imagen Docker
+	@echo   docker-run-cli - Ejecutar CLI dentro de contenedor Docker
+	@echo.
+	@echo UTILIDADES:
+	@echo   format       - Formatear codigo con Black
+	@echo   clean        - Limpiar archivos temporales y reportes
+	@echo   clean-test   - Limpiar archivos de tests y cobertura
+	@echo.
+	@echo =====================================
 
