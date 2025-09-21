@@ -79,14 +79,16 @@ def test_winsound_beep_with_zero_params():
     """Test winsound_beep con parámetros cero."""
     mock_winsound = MagicMock()
     
-    with patch.dict('sys.modules', {'winsound': mock_winsound}):
-        import importlib
-        import utils
-        importlib.reload(utils)
-        from utils import winsound_beep
-        
-        # Llamar con frecuencia y duración cero
-        winsound_beep(0, 0)
-        
-        # Debe llamar la función aunque los valores sean cero
-        mock_winsound.Beep.assert_called_once_with(0, 0)
+    # Simulamos plataforma Windows para que utils ejecute la rama de winsound
+    with patch('sys.platform', 'win32'):
+        with patch.dict('sys.modules', {'winsound': mock_winsound}):
+            import importlib
+            import utils
+            importlib.reload(utils)
+            from utils import winsound_beep
+            
+            # Llamar con frecuencia y duración cero
+            winsound_beep(0, 0)
+            
+            # Debe llamar la función aunque los valores sean cero
+            mock_winsound.Beep.assert_called_once_with(0, 0)
