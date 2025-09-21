@@ -17,6 +17,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Test específico de Windows")
 def test_winsound_beep_on_windows():
     """Test winsound_beep cuando winsound está disponible (Windows)."""
     # Mock del módulo winsound

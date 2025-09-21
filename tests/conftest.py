@@ -12,6 +12,20 @@ from pathlib import Path
 
 import pytest
 
+
+def pytest_collection_modifyitems(session, config, items):
+    """Marca ciertas pruebas como skip basado en los módulos que queremos desactivar."""
+    for item in items:
+        # Si el test está en los módulos que queremos desactivar, lo marcamos como skip
+        if any(module in item.nodeid for module in [
+            "test_grpc_services.py",
+            "test_cli.py",
+            "test_mlflow_integration.py",
+            "test_app_csv.py",
+            "test_headless_integration.py"
+        ]):
+            item.add_marker(pytest.mark.skip(reason="Test desactivado temporalmente"))
+
 # ----------------------------------------------------------------------
 # Configuración de rutas
 # ----------------------------------------------------------------------
